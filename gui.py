@@ -2,6 +2,7 @@
 GUI Application for TRAK File Builder.
 """
 import os
+import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import subprocess
@@ -383,8 +384,33 @@ class FileConverterApp:
                 messagebox.showerror("Error", f"Cannot open file: {text_path}")
     
     def upload_file(self):
-        """Upload the TRAK file to the remote server using SCP"""
+        """Upload the TRAK file to the remote server using Paramiko (cross-platform SSH/SCP)"""
         try:
+            # Check if paramiko is installed
+            try:
+                import paramiko
+            except ImportError:
+                self.log("The 'paramiko' package is required for file uploads.")
+                if messagebox.askyesno("Install Required Package", 
+                                      "The Python package 'paramiko' is required for file uploads.\nWould you like to install it now?"):
+                    self.log("Installing paramiko package...")
+                    self.root.update()
+                    
+                    # Use pip to install paramiko
+                    try:
+                        subprocess.check_call([sys.executable, "-m", "pip", "install", "paramiko"])
+                        self.log("Paramiko installed successfully.")
+                        # Import paramiko now that it's installed
+                        import paramiko
+                    except Exception as e:
+                        self.log(f"Error installing paramiko: {e}")
+                        messagebox.showerror("Installation Error", 
+                                            f"Failed to install paramiko. Please install it manually using:\npip install paramiko")
+                        return
+                else:
+                    self.log("Upload cancelled - required package not installed")
+                    return
+
             # Determine the file path to upload
             text_path = self.text_output_path.get()
             
@@ -404,91 +430,43 @@ class FileConverterApp:
                 # User cancelled the password dialog
                 self.log("Upload cancelled - no password provided")
                 return
-            
-            # Create the SCP command using sshpass to provide the password
-            remote_target = f"{username}@{host}:{target_path}"
-            
-            # Check if sshpass is available - platform-specific approach
-            sshpass_available = False
-            is_windows = os.name == 'nt'
-            is_posix = os.name == 'posix'
-            
-            if is_posix:  # Linux/Unix/macOS
-                sshpass_available = subprocess.run(
-                    ["which", "sshpass"], 
-                    capture_output=True
-                ).returncode == 0
-            elif is_windows:  # Windows
-                # On Windows, try to check if sshpass exists in PATH
-                try:
-                    sshpass_available = subprocess.run(
-                        ["where", "sshpass"],
-                        capture_output=True,
-                        shell=True
-                    ).returncode == 0
-                except (FileNotFoundError, subprocess.SubprocessError):
-                    # 'where' command might not be available or might fail
-                    sshpass_available = False
-            
-            # Check if scp is available
-            scp_available = False
-            if is_posix:  # Linux/Unix/macOS
-                scp_available = subprocess.run(
-                    ["which", "scp"], 
-                    capture_output=True
-                ).returncode == 0
-            elif is_windows:  # Windows
-                try:
-                    scp_available = subprocess.run(
-                        ["where", "scp"],
-                        capture_output=True,
-                        shell=True
-                    ).returncode == 0
-                except (FileNotFoundError, subprocess.SubprocessError):
-                    scp_available = False
-            
-            if not scp_available:
-                self.log("Error: SCP is not available on this system")
-                messagebox.showerror("Error", "SCP is not available on this system. Please install an SCP client.")
-                return
-            
-            if sshpass_available:
-                # Use sshpass for password authentication
-                scp_command = ["sshpass", "-p", password, "scp", text_path, remote_target]
-            else:
-                # If sshpass is not available, will need to enter password manually
-                scp_command = ["scp", text_path, remote_target]
-                self.log("Note: 'sshpass' not found on system. You will need to enter password manually in terminal.")
-            
-            # Log the command (without showing the password)
-            if sshpass_available:
-                # Don't log the actual password
-                log_command = ["sshpass", "-p", "*****", "scp", text_path, remote_target]
-                self.log(f"Uploading file with command: {' '.join(log_command)}")
-            else:
-                self.log(f"Uploading file with command: scp {text_path} {remote_target}")
-            
+                
+            self.log(f"Connecting to {host} as {username}...")
             self.root.update()
+                
+            # Create SSH client
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
-            # Execute the SCP command
-            process = subprocess.Popen(
-                scp_command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                shell=is_windows  # Use shell=True for Windows
-            )
-            
-            stdout, stderr = process.communicate()
-            
-            if process.returncode == 0:
+            try:
+                # Connect to the server
+                ssh.connect(hostname=host, username=username, password=password)
+                self.log("Connected to server. Uploading file...")
+                self.root.update()
+                
+                # Upload the file using SCP
+                with ssh.open_sftp() as sftp:
+                    sftp.put(text_path, target_path)
+                    
                 self.log("Upload successful!")
                 messagebox.showinfo("Success", "File uploaded successfully!")
-            else:
-                error_message = stderr.strip()
-                self.log(f"Upload failed: {error_message}")
-                messagebox.showerror("Error", f"Upload failed:\n{error_message}")
                 
+            except paramiko.AuthenticationException:
+                self.log("Authentication failed. Check username and password.")
+                messagebox.showerror("Authentication Error", "Failed to authenticate. Check username and password.")
+            except paramiko.SSHException as e:
+                self.log(f"SSH connection error: {str(e)}")
+                messagebox.showerror("Connection Error", f"SSH connection error: {str(e)}")
+            except paramiko.sftp.SFTPError as e:
+                self.log(f"SFTP error: {str(e)}")
+                messagebox.showerror("SFTP Error", f"SFTP error during upload: {str(e)}")
+            except Exception as e:
+                self.log(f"Error during upload: {str(e)}")
+                messagebox.showerror("Upload Error", f"Error during upload: {str(e)}")
+            finally:
+                # Close the SSH connection
+                ssh.close()
+                    
         except Exception as e:
             error_message = str(e)
             self.log(f"Upload error: {error_message}")
