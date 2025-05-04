@@ -14,7 +14,12 @@ class FileConverterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TRAK File Converter")
-        self.root.geometry("700x600")
+        self.root.geometry("700x800")  # Increased height from 600 to 700
+        self.root.minsize(600, 600)  # Increased minimum height from 500 to 600
+        
+        # Configure root to be responsive
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
         
         # Variables
         self.input_file_path = tk.StringVar()
@@ -28,22 +33,28 @@ class FileConverterApp:
         self.scp_host = tk.StringVar(value="192.168.12.99")
         self.scp_target_path = tk.StringVar(value="/trak/data/trakdelim.txt")
         
-        # Status variable
-        self.status_text = tk.StringVar()
-        self.status_text.set("Ready to convert")
-        
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.grid(row=0, column=0, sticky="nsew")  # Use grid instead of pack for the main frame
+        
+        # Configure main_frame rows and columns
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=3)  # Notebook gets more space
+        main_frame.rowconfigure(1, weight=1)  # Log area gets less space
         
         # Create the notebook (tabbed interface)
         self.notebook = ttk.Notebook(main_frame)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.notebook.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)  # Use grid instead of pack
         
         # Create pages
         self.page1 = ttk.Frame(self.notebook)
         self.page2 = ttk.Frame(self.notebook)
         self.page3 = ttk.Frame(self.notebook)
+        
+        # Configure page frames to be responsive
+        for page in [self.page1, self.page2, self.page3]:
+            page.columnconfigure(0, weight=1)
+            page.rowconfigure(0, weight=1)
         
         # Add pages to notebook
         self.notebook.add(self.page1, text="1. Select Input")
@@ -61,27 +72,31 @@ class FileConverterApp:
         
         # Log area (common to all pages)
         log_frame = ttk.LabelFrame(main_frame, text="Log", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        log_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)  # Use grid instead of pack
+        
+        # Configure log_frame
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
         
         self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+        self.log_text.grid(row=0, column=0, sticky="nsew")  # Use grid instead of pack
         
-        # Scrollbar for log
-        scrollbar = ttk.Scrollbar(self.log_text, command=self.log_text.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # Scrollbar for log - place it properly
+        scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text.config(yscrollcommand=scrollbar.set)
-        
-        # Status bar (common to all pages)
-        status_frame = ttk.Frame(main_frame)
-        status_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=5)
-        
-        ttk.Label(status_frame, textvariable=self.status_text, relief=tk.SUNKEN, anchor=tk.W).pack(fill=tk.X)
     
     def create_page1(self):
         """Create content for the first page (Input Selection)"""
         # Input file section
         input_frame = ttk.LabelFrame(self.page1, text="Select Input Excel File", padding="20")
         input_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Configure input_frame grid weights
+        input_frame.columnconfigure(0, weight=0)  # Labels don't need to expand
+        input_frame.columnconfigure(1, weight=1)  # Entry fields should expand
+        input_frame.columnconfigure(2, weight=0)  # Buttons don't need to expand
+        input_frame.columnconfigure(3, weight=0)  # Buttons don't need to expand
         
         ttk.Label(input_frame, text="Excel File:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=15)
         ttk.Entry(input_frame, textvariable=self.input_file_path, width=50).grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
@@ -107,12 +122,16 @@ class FileConverterApp:
         button_frame = ttk.Frame(self.page1)
         button_frame.pack(fill=tk.X, padx=10, pady=20)
         
-        ttk.Button(
+        # Configure button_frame to allow button to stay right-aligned
+        button_frame.columnconfigure(0, weight=1)
+        
+        process_button = ttk.Button(
             button_frame, 
             text="Build Spreadsheet", 
             command=self.process_to_excel,
             width=20
-        ).pack(side=tk.RIGHT, padx=5)
+        )
+        process_button.grid(row=0, column=0, sticky=tk.E, padx=5)
     
     def create_page2(self):
         """Create content for the second page (Spreadsheet View/Edit)"""
@@ -120,25 +139,35 @@ class FileConverterApp:
         sheet_frame = ttk.LabelFrame(self.page2, text="Generated Spreadsheet", padding="20")
         sheet_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+        # Configure the sheet_frame to be responsive
+        sheet_frame.columnconfigure(0, weight=0)  # Label column
+        sheet_frame.columnconfigure(1, weight=1)  # Entry column
+        sheet_frame.rowconfigure(0, weight=0)     # Fixed height for the path row
+        sheet_frame.rowconfigure(1, weight=1)     # Button frame can expand
+        
         ttk.Label(sheet_frame, text="Spreadsheet Path:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=15)
         ttk.Entry(sheet_frame, textvariable=self.excel_output_path, width=50, state="readonly").grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
         
         button_frame = ttk.Frame(sheet_frame)
         button_frame.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=15)
         
+        # Make the button frame responsive
+        button_frame.columnconfigure(0, weight=1)  # Left side gets space
+        button_frame.columnconfigure(1, weight=1)  # Right side gets space
+        
         ttk.Button(
             button_frame, 
             text="View/Edit Spreadsheet", 
             command=self.open_excel_file,
             width=25
-        ).pack(side=tk.LEFT, padx=5)
+        ).grid(row=0, column=0, sticky=tk.W, padx=5)
         
         ttk.Button(
             button_frame, 
             text="Build TRAK File", 
             command=self.process_to_text,
             width=25
-        ).pack(side=tk.RIGHT, padx=5)
+        ).grid(row=0, column=1, sticky=tk.E, padx=5)
     
     def create_page3(self):
         """Create content for the third page (TRAK File View/Upload)"""
@@ -146,22 +175,36 @@ class FileConverterApp:
         text_frame = ttk.LabelFrame(self.page3, text="Generated TRAK File", padding="20")
         text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+        # Configure text_frame to be responsive
+        text_frame.columnconfigure(0, weight=0)  # Label column
+        text_frame.columnconfigure(1, weight=1)  # Entry column
+        text_frame.rowconfigure(0, weight=0)     # Fixed height for path row
+        text_frame.rowconfigure(1, weight=1)     # Button frame can expand
+        
         ttk.Label(text_frame, text="TRAK File Path:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=15)
         ttk.Entry(text_frame, textvariable=self.text_output_path, width=50, state="readonly").grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
         
         button_frame = ttk.Frame(text_frame)
         button_frame.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=15)
         
+        # Configure button_frame to be responsive
+        button_frame.columnconfigure(0, weight=1)
+        
         ttk.Button(
             button_frame, 
             text="View/Edit TRAK File", 
             command=self.open_text_file,
             width=25
-        ).pack(side=tk.LEFT, padx=5)
+        ).grid(row=0, column=0, sticky=tk.W, padx=5)
         
         # SCP upload section
         scp_frame = ttk.LabelFrame(self.page3, text="Upload to TRAK Server", padding="10")
-        scp_frame.pack(fill=tk.X, padx=10, pady=10)
+        scp_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Configure scp_frame to be responsive
+        scp_frame.columnconfigure(0, weight=0)  # Label column
+        scp_frame.columnconfigure(1, weight=1)  # Entry/button column
+        scp_frame.columnconfigure(2, weight=0)  # Extra column if needed
         
         ttk.Label(scp_frame, text="Username:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
         ttk.Entry(scp_frame, textvariable=self.scp_username, width=15).grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
@@ -183,12 +226,16 @@ class FileConverterApp:
         nav_frame = ttk.Frame(self.page3)
         nav_frame.pack(fill=tk.X, padx=10, pady=10)
         
+        # Configure nav_frame to be responsive
+        nav_frame.columnconfigure(0, weight=1)
+        nav_frame.columnconfigure(1, weight=1)
+        
         ttk.Button(
             nav_frame, 
             text="Start Over", 
             command=self.start_over,
             width=15
-        ).pack(side=tk.LEFT, padx=5)
+        ).grid(row=0, column=0, sticky=tk.W, padx=5)
     
     def browse_input_file(self):
         filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
@@ -266,7 +313,6 @@ class FileConverterApp:
             return
         
         try:
-            self.status_text.set("Processing input data...")
             self.root.update()
             
             # Process the input data and create Excel
@@ -275,7 +321,6 @@ class FileConverterApp:
             self.excel_output_path.set(excel_path)
             
             self.log(f"Created Excel file: {excel_path}")
-            self.status_text.set("Spreadsheet created successfully!")
             
             # Enable page 2 and switch to it
             self.notebook.tab(1, state="normal")
@@ -283,7 +328,6 @@ class FileConverterApp:
             
         except Exception as e:
             error_message = str(e)
-            self.status_text.set("Error: " + error_message)
             self.log("ERROR: " + error_message)
             messagebox.showerror("Error", f"An error occurred during processing:\n{error_message}")
     
@@ -307,7 +351,6 @@ class FileConverterApp:
             return
             
         try:
-            self.status_text.set("Generating TRAK file...")
             self.root.update()
             
             # Read the Excel file
@@ -319,7 +362,6 @@ class FileConverterApp:
             self.text_output_path.set(text_path)
             
             self.log(f"Created TRAK file: {text_path}")
-            self.status_text.set("TRAK file created successfully!")
             
             # Enable page 3 and switch to it
             self.notebook.tab(2, state="normal")
@@ -327,7 +369,6 @@ class FileConverterApp:
             
         except Exception as e:
             error_message = str(e)
-            self.status_text.set("Error: " + error_message)
             self.log("ERROR: " + error_message)
             messagebox.showerror("Error", f"An error occurred during text file generation:\n{error_message}")
     
@@ -427,7 +468,6 @@ class FileConverterApp:
             else:
                 self.log(f"Uploading file with command: scp {text_path} {remote_target}")
             
-            self.status_text.set("Uploading file...")
             self.root.update()
             
             # Execute the SCP command
@@ -443,18 +483,15 @@ class FileConverterApp:
             
             if process.returncode == 0:
                 self.log("Upload successful!")
-                self.status_text.set("Upload completed successfully")
                 messagebox.showinfo("Success", "File uploaded successfully!")
             else:
                 error_message = stderr.strip()
                 self.log(f"Upload failed: {error_message}")
-                self.status_text.set("Upload failed")
                 messagebox.showerror("Error", f"Upload failed:\n{error_message}")
                 
         except Exception as e:
             error_message = str(e)
             self.log(f"Upload error: {error_message}")
-            self.status_text.set("Upload error")
             messagebox.showerror("Error", f"An error occurred during upload:\n{error_message}")
     
     def start_over(self):
@@ -470,10 +507,10 @@ class FileConverterApp:
         # Switch to page 1
         self.notebook.select(0)
         
-        self.status_text.set("Ready to convert")
         self.log("Started a new conversion process")
     
     def log(self, message):
         """Add a message to the log text area"""
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
+        self.log_text.update()
