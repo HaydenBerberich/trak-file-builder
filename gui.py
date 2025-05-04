@@ -1,292 +1,15 @@
-import pandas as pd
+"""
+GUI Application for TRAK File Builder.
+"""
+import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
-import os
-import sys
 import subprocess
+import pandas as pd
 
-# Function to determine the selling price for CDs based on cost
-def get_cd_price(cost):
-    if cost <= 0:
-        return None
-    elif cost <= 0.99:
-        return 1.99
-    elif cost <= 1.99:
-        return 3.99
-    elif cost <= 2.99:
-        return 5.99
-    elif cost <= 3.99:
-        return 7.99
-    elif cost <= 4.99:
-        return 9.99
-    elif cost <= 5.99:
-        return 11.99
-    elif cost <= 6.99:
-        return 13.99
-    elif cost <= 7.99:
-        return 14.99
-    elif cost <= 9.99:
-        return 15.99
-    elif cost <= 11.99:
-        return 16.99
-    elif cost <= 12.99:
-        return 17.99
-    elif cost <= 13.99:
-        return 21.99
-    elif cost <= 14.99:
-        return 22.99
-    elif cost <= 15.99:
-        return 24.99
-    elif cost <= 16.99:
-        return 25.99
-    elif cost <= 17.99:
-        return 26.99
-    elif cost <= 18.99:
-        return 27.99
-    elif cost <= 19.99:
-        return 29.99
-    elif cost <= 20.99:
-        return 31.99
-    else:
-        return cost * 1.4  # If cost > 20.99, price = cost * 1.4
+from utils import open_with_default_app
+from file_processor import process_input_data, generate_delimited_file, create_new_spreadsheet
 
-# Function to determine the selling price for LPs based on cost
-def get_lp_price(cost):
-    if cost <= 0:
-        return None
-    elif cost <= 0.99:
-        return 1.99
-    elif cost <= 1.99:
-        return 3.99
-    elif cost <= 2.99:
-        return 5.99
-    elif cost <= 3.99:
-        return 7.99
-    elif cost <= 4.99:
-        return 9.99
-    elif cost <= 5.99:
-        return 11.99
-    elif cost <= 6.99:
-        return 13.99
-    elif cost <= 7.99:
-        return 14.99
-    elif cost <= 9.99:
-        return 15.99
-    elif cost <= 10.99:
-        return 19.99
-    elif cost <= 11.99:
-        return 22.99
-    elif cost <= 12.99:
-        return 22.99
-    elif cost <= 13.99:
-        return 23.99
-    elif cost <= 14.99:
-        return 24.99
-    elif cost <= 15.99:
-        return 25.99
-    elif cost <= 16.99:
-        return 27.99
-    elif cost <= 17.99:
-        return 29.99
-    elif cost <= 18.99:
-        return 30.99
-    elif cost <= 19.99:
-        return 31.99
-    elif cost <= 20.99:
-        return 33.99
-    elif cost <= 21.99:
-        return 34.99
-    elif cost <= 22.99:
-        return 35.99
-    elif cost <= 23.99:
-        return 36.99
-    elif cost <= 24.99:
-        return 38.99
-    elif cost <= 25.99:
-        return 39.99
-    elif cost <= 26.99:
-        return 41.99
-    elif cost <= 27.99:
-        return 44.99
-    elif cost <= 28.99:
-        return 45.99
-    elif cost <= 29.99:
-        return 46.99
-    elif cost <= 30.99:
-        return 47.99
-    elif cost <= 31.99:
-        return 48.99
-    elif cost <= 32.99:
-        return 49.99
-    elif cost <= 33.99:
-        return 50.99
-    elif cost <= 34.99:
-        return 52.99
-    elif cost <= 35.99:
-        return 54.99
-    elif cost <= 36.99:
-        return 55.99
-    elif cost <= 37.99:
-        return 58.99
-    elif cost <= 38.99:
-        return 59.99
-    elif cost <= 39.99:
-        return 61.99
-    elif cost <= 40.99:
-        return 62.99
-    elif cost <= 41.99:
-        return 64.99
-    elif cost <= 42.99:
-        return 65.99
-    elif cost <= 43.99:
-        return 66.99
-    elif cost <= 44.99:
-        return 68.99
-    elif cost <= 45.99:
-        return 69.99
-    elif cost <= 46.99:
-        return 71.99
-    elif cost <= 47.99:
-        return 73.99
-    elif cost <= 48.99:
-        return 74.99
-    elif cost <= 49.99:
-        return 76.99
-    else:
-        return cost * 1.4  # If cost > 49.99, price = cost * 1.4
-
-# Process the input data and create a complete Excel file
-def process_input_data(input_file_path, output_dir):
-    # Read the Excel file into a DataFrame, ensuring the UPC column is read as a string
-    df = pd.read_excel(input_file_path, dtype={'UPC': str})
-
-    # Drop rows where all of the required columns are NaN (blank)
-    df = df.dropna(subset=['UPC', 'TITLE', 'ARTIST', 'MANUF', 'GENRE', 'CONFIG', 'DEPT', 'MISC', 'PRICE', 'VENDOR', 'COST'], how='all')
-
-    # Replace NaN values with an empty string
-    df = df.fillna('')
-
-    # Set MISC and VENDOR to MANUF if they're not provided
-    df['MISC'] = df.apply(lambda row: row['MANUF'] if not row['MISC'] else row['MISC'], axis=1)
-    df['VENDOR'] = df.apply(lambda row: row['MANUF'] if not row['VENDOR'] else row['VENDOR'], axis=1)
-
-    # Remove dollar signs from PRICE, COST, and LIST columns
-    df['PRICE'] = df['PRICE'].replace({r'\$': ''}, regex=True)
-    df['COST'] = df['COST'].replace({r'\$': ''}, regex=True)
-    df['LIST'] = df['LIST'].replace({r'\$': ''}, regex=True)
-
-    # Process each row to fill in missing values
-    processed_rows = []
-    
-    for index, row in df.iterrows():
-        processed_row = row.copy()
-        
-        # Set department based on CONFIG if DEPT is empty
-        if not processed_row['DEPT']:
-            if processed_row['CONFIG'] == 'CD':
-                processed_row['DEPT'] = '02'
-            elif processed_row['CONFIG'] == 'LP':
-                processed_row['DEPT'] = '01'
-        else:
-            # Ensure DEPT is formatted as two digits
-            dept = str(int(processed_row['DEPT']))
-            if len(dept) == 1:
-                processed_row['DEPT'] = '0' + dept
-            else:
-                processed_row['DEPT'] = dept
-                
-        # Calculate LIST and PRICE based on CONFIG if missing
-        cost_value = float(processed_row['COST']) if processed_row['COST'] else 0
-        
-        if processed_row['CONFIG'] == 'CD':
-            # If price is missing, determine it from the cost
-            if not processed_row['PRICE']:
-                calculated_price = get_cd_price(cost_value)
-                if calculated_price:
-                    processed_row['PRICE'] = format(calculated_price, '.2f')
-            
-            # If list price is missing, use the same calculation as price
-            if not processed_row['LIST']:
-                calculated_list = get_cd_price(cost_value)
-                if calculated_list:
-                    processed_row['LIST'] = format(calculated_list, '.2f')
-                    
-        elif processed_row['CONFIG'] == 'LP':
-            # If price is missing, determine it from the cost using the LP pricing table
-            if not processed_row['PRICE']:
-                calculated_price = get_lp_price(cost_value)
-                if calculated_price:
-                    processed_row['PRICE'] = format(calculated_price, '.2f')
-            
-            # If list price is missing, use the same calculation as price
-            if not processed_row['LIST']:
-                calculated_list = get_lp_price(cost_value)
-                if calculated_list:
-                    processed_row['LIST'] = format(calculated_list, '.2f')
-        
-        # Format cost value
-        if processed_row['COST']:
-            processed_row['COST'] = format(float(processed_row['COST']), '.2f')
-            
-        processed_rows.append(processed_row)
-    
-    # Create a new DataFrame with processed data
-    processed_df = pd.DataFrame(processed_rows)
-    
-    # Reorder columns to match the desired output format
-    ordered_columns = ['UPC', 'TITLE', 'ARTIST', 'MANUF', 'GENRE', 'CONFIG', 'DEPT', 'MISC', 'LIST', 'PRICE', 'VENDOR', 'COST']
-    processed_df = processed_df[ordered_columns]
-    
-    # Create output file paths
-    excel_output_path = os.path.join(output_dir, 'trakdelim.xlsx')
-    
-    # Save to a new Excel file
-    processed_df.to_excel(excel_output_path, index=False)
-    
-    return processed_df, excel_output_path
-
-# Generate the delimited text file from the processed data
-def generate_delimited_file(df, output_dir):
-    # Create output file path
-    text_output_path = os.path.join(output_dir, 'trakdelim.txt')
-    
-    # Open the output file for writing in the specified directory
-    with open(text_output_path, 'w') as file:
-        
-        # Iterate over each row in the DataFrame
-        for index, row in df.iterrows():
-            # Format the numeric values for the delimited file (no decimal points)
-            # Ensure values are strings before calling replace
-            list_price = str(row['LIST']).replace('.', '') if pd.notna(row['LIST']) else ''
-            price = str(row['PRICE']).replace('.', '') if pd.notna(row['PRICE']) else ''
-            cost = str(row['COST']).replace('.', '') if pd.notna(row['COST']) else ''
-            
-            # Format the row data according to the specified layout
-            formatted_row = (
-                f"C|{row['UPC']}|{row['TITLE']}|{row['ARTIST']}|{row['MANUF']}|||{row['GENRE']}|||{row['MISC']}|{row['CONFIG']}|||{row['DEPT']}|{list_price}||||||{row['VENDOR']}|{cost}|||||||||{price}"
-            )
-
-            # Write the formatted data to the output file
-            file.write(formatted_row + '\n')
-            
-    return text_output_path
-
-# Function to open a file with the default application
-def open_with_default_app(file_path):
-    if not os.path.exists(file_path):
-        return False
-        
-    if sys.platform.startswith('darwin'):  # macOS
-        subprocess.call(('open', file_path))
-    elif os.name == 'nt':  # Windows
-        os.startfile(file_path)
-    elif os.name == 'posix':  # Linux
-        # Redirect stderr to /dev/null to suppress warnings
-        with open(os.devnull, 'w') as devnull:
-            subprocess.call(('xdg-open', file_path), stderr=devnull)
-    return True
-
-# GUI Application
 class FileConverterApp:
     def __init__(self, root):
         self.root = root
@@ -362,13 +85,18 @@ class FileConverterApp:
         
         ttk.Label(input_frame, text="Excel File:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=15)
         ttk.Entry(input_frame, textvariable=self.input_file_path, width=50).grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
-        ttk.Button(input_frame, text="Browse...", command=self.browse_input_file).grid(row=0, column=2, padx=5, pady=15)
+        browse_button = ttk.Button(input_frame, text="Browse...", command=self.browse_input_file)
+        browse_button.grid(row=0, column=2, padx=5, pady=15)
+        
+        # Add Create New button
+        create_new_button = ttk.Button(input_frame, text="Create New", command=self.create_new_spreadsheet)
+        create_new_button.grid(row=0, column=3, padx=5, pady=15)
         
         # Add required and optional columns information
         ttk.Label(input_frame, text="Required Columns: UPC, TITLE, ARTIST, MANUF, GENRE, CONFIG, COST", 
-                 ).grid(row=1, column=0, columnspan=3, sticky=tk.W, padx=5, pady=2)
+                 foreground="red").grid(row=1, column=0, columnspan=4, sticky=tk.W, padx=5, pady=2)
         ttk.Label(input_frame, text="Optional Columns: DEPT, MISC, LIST, PRICE, VENDOR",
-                 ).grid(row=2, column=0, columnspan=3, sticky=tk.W, padx=5, pady=2)
+                 foreground="blue").grid(row=2, column=0, columnspan=4, sticky=tk.W, padx=5, pady=2)
         
         # Output directory
         ttk.Label(input_frame, text="Output Directory:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=15)
@@ -479,6 +207,41 @@ class FileConverterApp:
         if directory:
             self.output_dir.set(directory)
             self.log("Selected output directory: " + directory)
+    
+    def create_new_spreadsheet(self):
+        """Create a new spreadsheet with required and optional columns"""
+        # Ask user for the save location
+        filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
+        file_path = filedialog.asksaveasfilename(
+            title="Create New Spreadsheet",
+            defaultextension=".xlsx",
+            filetypes=filetypes
+        )
+        
+        if not file_path:
+            return  # User cancelled
+            
+        try:
+            # Create a new spreadsheet using the file_processor module
+            if create_new_spreadsheet(file_path):
+                # Set the input file path to the new file
+                self.input_file_path.set(file_path)
+                self.log(f"Created new spreadsheet: {file_path}")
+                
+                # Open the file with the default spreadsheet editor
+                if open_with_default_app(file_path):
+                    self.log(f"Opened new spreadsheet: {file_path}")
+                else:
+                    self.log(f"Error: Cannot open file {file_path}")
+                    messagebox.showerror("Error", f"Cannot open file: {file_path}")
+            else:
+                self.log("Error creating new spreadsheet")
+                messagebox.showerror("Error", "Failed to create new spreadsheet")
+                
+        except Exception as e:
+            error_message = str(e)
+            self.log(f"Error creating spreadsheet: {error_message}")
+            messagebox.showerror("Error", f"An error occurred while creating the spreadsheet:\n{error_message}")
     
     def process_to_excel(self):
         """Process the input file to create the Excel spreadsheet"""
@@ -714,9 +477,3 @@ class FileConverterApp:
         """Add a message to the log text area"""
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
-
-# Main execution
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = FileConverterApp(root)
-    root.mainloop()
