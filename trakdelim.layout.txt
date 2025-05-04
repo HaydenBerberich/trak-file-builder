@@ -1,0 +1,19 @@
+X080815      0                     COMMENTLINECOMMENTLINECOMMENTLV@TRAK@4                      
+A|UPCUPCUPCUPC|TITLETITLETITLETITLETITLETITLE|ARTISTARTISTARTISTARTISTARTIST|SUPPLI|LABELL|ORDERNUMOR|CATE|VPCV|LOCA|MISCMI|CG|ALTSTKALTSTKA||DEPARTMENTDEP|999999|00100000|010101|020202|030303|123|VENDO1|222222|VENDO2|333333|VENDO3|444444|VENDO4|555555|COMMENT1COMMENT1COMMENT1COMMEN|COMMENT2COMMENT2COMMENT2COMMEN|123456|
+
+A|123456789|TITLE|ARTIST|MAN|LAB|ORDNUM|CAT|123|LOC|MISC|CG|||111|00000000||010101|020202|030303|321|VEND1|111|VEND2|222|VEND3|333|VEND4|444|COMMENT1|COMMENT2|333|444
+
+(A,C,D) Code|UPC 13|TITLE|ARTIST|Manufact|Label|Order No|Category|VPC|Location|Misc|Config|AltStockno|T-Number|Dept|List_Price|Bit_Buffer|Street_Date|Last_Order_Date|Last_Return_Date|Priority_Number|Vend1|VendCost1|Vend2|VendCost2|Vend3|VendCost3|Vend4|VendCost4|Comment1|Comment2|Retail
+
+trakdelim.txt is the filename of a trak delimted file. That'll go in the same directory, /trak/data
+
+
+There's a header on the file. I would have to go through and check if that's necessary or ignored if not present on the first line.
+
+The steps to post that are K,D,A,T (For the alternate Trak Delim database type) off the main menu then the "U"pdate option.
+
+scp trakdelim.txt trak@192.168.12.99:/trak/data
+
+I, M, A - vendor file maintenence
+
+K, S, 2 - StreetPulse
