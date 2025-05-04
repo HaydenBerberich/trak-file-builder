@@ -364,10 +364,16 @@ class FileConverterApp:
         ttk.Entry(input_frame, textvariable=self.input_file_path, width=50).grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
         ttk.Button(input_frame, text="Browse...", command=self.browse_input_file).grid(row=0, column=2, padx=5, pady=15)
         
+        # Add required and optional columns information
+        ttk.Label(input_frame, text="Required Columns: UPC, TITLE, ARTIST, MANUF, GENRE, CONFIG, COST", 
+                 ).grid(row=1, column=0, columnspan=3, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(input_frame, text="Optional Columns: DEPT, MISC, LIST, PRICE, VENDOR",
+                 ).grid(row=2, column=0, columnspan=3, sticky=tk.W, padx=5, pady=2)
+        
         # Output directory
-        ttk.Label(input_frame, text="Output Directory:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=15)
-        ttk.Entry(input_frame, textvariable=self.output_dir, width=50).grid(row=1, column=1, sticky=tk.EW, padx=5, pady=15)
-        ttk.Button(input_frame, text="Browse...", command=self.browse_output_dir).grid(row=1, column=2, padx=5, pady=15)
+        ttk.Label(input_frame, text="Output Directory:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=15)
+        ttk.Entry(input_frame, textvariable=self.output_dir, width=50).grid(row=3, column=1, sticky=tk.EW, padx=5, pady=15)
+        ttk.Button(input_frame, text="Browse...", command=self.browse_output_dir).grid(row=3, column=2, padx=5, pady=15)
         
         # Process button
         button_frame = ttk.Frame(self.page1)
