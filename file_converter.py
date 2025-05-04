@@ -598,11 +598,49 @@ class FileConverterApp:
             # Create the SCP command using sshpass to provide the password
             remote_target = f"{username}@{host}:{target_path}"
             
-            # First check if sshpass is available
-            sshpass_available = subprocess.run(
-                ["which", "sshpass"], 
-                capture_output=True
-            ).returncode == 0
+            # Check if sshpass is available - platform-specific approach
+            sshpass_available = False
+            is_windows = os.name == 'nt'
+            is_posix = os.name == 'posix'
+            
+            if is_posix:  # Linux/Unix/macOS
+                sshpass_available = subprocess.run(
+                    ["which", "sshpass"], 
+                    capture_output=True
+                ).returncode == 0
+            elif is_windows:  # Windows
+                # On Windows, try to check if sshpass exists in PATH
+                try:
+                    sshpass_available = subprocess.run(
+                        ["where", "sshpass"],
+                        capture_output=True,
+                        shell=True
+                    ).returncode == 0
+                except (FileNotFoundError, subprocess.SubprocessError):
+                    # 'where' command might not be available or might fail
+                    sshpass_available = False
+            
+            # Check if scp is available
+            scp_available = False
+            if is_posix:  # Linux/Unix/macOS
+                scp_available = subprocess.run(
+                    ["which", "scp"], 
+                    capture_output=True
+                ).returncode == 0
+            elif is_windows:  # Windows
+                try:
+                    scp_available = subprocess.run(
+                        ["where", "scp"],
+                        capture_output=True,
+                        shell=True
+                    ).returncode == 0
+                except (FileNotFoundError, subprocess.SubprocessError):
+                    scp_available = False
+            
+            if not scp_available:
+                self.log("Error: SCP is not available on this system")
+                messagebox.showerror("Error", "SCP is not available on this system. Please install an SCP client.")
+                return
             
             if sshpass_available:
                 # Use sshpass for password authentication
@@ -628,7 +666,8 @@ class FileConverterApp:
                 scp_command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                universal_newlines=True
+                universal_newlines=True,
+                shell=is_windows  # Use shell=True for Windows
             )
             
             stdout, stderr = process.communicate()
