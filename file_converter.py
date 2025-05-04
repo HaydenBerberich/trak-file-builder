@@ -9,6 +9,10 @@ df = df.dropna(subset=['UPC', 'TITLE', 'ARTIST', 'MANUF', 'GENRE', 'CONFIG', 'DE
 # Replace NaN values with an empty string
 df = df.fillna('')
 
+# Set MISC and VENDOR to MANUF if they're not provided
+df['MISC'] = df.apply(lambda row: row['MANUF'] if not row['MISC'] else row['MISC'], axis=1)
+df['VENDOR'] = df.apply(lambda row: row['MANUF'] if not row['VENDOR'] else row['VENDOR'], axis=1)
+
 # Remove dollar signs from PRICE, COST, and LIST columns
 df['PRICE'] = df['PRICE'].replace({r'\$': ''}, regex=True)
 df['COST'] = df['COST'].replace({r'\$': ''}, regex=True)
