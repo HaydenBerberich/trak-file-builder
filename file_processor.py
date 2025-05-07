@@ -18,11 +18,24 @@ def process_input_data(input_file_path, output_dir):
     Returns:
         tuple: (DataFrame with processed data, path to the Excel output file)
     """
-    # Read the Excel file into a DataFrame, ensuring the UPC column is read as a string
-    df = pd.read_excel(input_file_path, dtype={'UPC': str})
+    # Read the Excel file into a DataFrame
+    df = pd.read_excel(input_file_path)
+    
+    # Define required and optional columns
+    required_columns = ['UPC', 'TITLE', 'ARTIST', 'MANUF', 'GENRE', 'CONFIG', 'COST']
+    optional_columns = ['DEPT', 'MISC', 'LIST', 'PRICE', 'VENDOR']
+    all_columns = required_columns + optional_columns
+    
+    # Check for missing columns and add them if they don't exist
+    for column in all_columns:
+        if column not in df.columns:
+            df[column] = ''  # Add empty column if it doesn't exist
+    
+    # Ensure UPC column is treated as a string
+    df['UPC'] = df['UPC'].astype(str)
 
-    # Drop rows where all of the required columns are NaN (blank)
-    df = df.dropna(subset=['UPC', 'TITLE', 'ARTIST', 'MANUF', 'GENRE', 'CONFIG', 'DEPT', 'MISC', 'PRICE', 'VENDOR', 'COST'], how='all')
+    # Drop rows where all specified columns are NaN (blank)
+    df = df.dropna(subset=all_columns, how='all')
 
     # Replace NaN values with an empty string
     df = df.fillna('')
@@ -42,6 +55,15 @@ def process_input_data(input_file_path, output_dir):
     for index, row in df.iterrows():
         processed_row = row.copy()
         
+        # Pad UPC with leading zeros to ensure it's at least 12 digits
+        if processed_row['UPC'] and processed_row['UPC'] != 'nan':
+            # Remove any non-digit characters
+            upc = ''.join(filter(str.isdigit, str(processed_row['UPC'])))
+            # Pad with leading zeros if less than 12 digits
+            if len(upc) < 12:
+                upc = upc.zfill(12)
+            processed_row['UPC'] = upc
+        
         # Set department based on CONFIG if DEPT is empty
         if not processed_row['DEPT']:
             if processed_row['CONFIG'] == 'CD':
@@ -50,14 +72,21 @@ def process_input_data(input_file_path, output_dir):
                 processed_row['DEPT'] = '01'
         else:
             # Ensure DEPT is formatted as two digits
-            dept = str(int(processed_row['DEPT']))
-            if len(dept) == 1:
-                processed_row['DEPT'] = '0' + dept
-            else:
-                processed_row['DEPT'] = dept
+            try:
+                dept = str(int(processed_row['DEPT']))
+                if len(dept) == 1:
+                    processed_row['DEPT'] = '0' + dept
+                else:
+                    processed_row['DEPT'] = dept
+            except (ValueError, TypeError):
+                # If DEPT contains non-numeric values, keep as is
+                pass
                 
         # Calculate LIST and PRICE based on CONFIG if missing
-        cost_value = float(processed_row['COST']) if processed_row['COST'] else 0
+        try:
+            cost_value = float(processed_row['COST']) if processed_row['COST'] else 0
+        except (ValueError, TypeError):
+            cost_value = 0
         
         if processed_row['CONFIG'] == 'CD':
             # If price is missing, determine it from the cost
@@ -87,7 +116,11 @@ def process_input_data(input_file_path, output_dir):
         
         # Format cost value
         if processed_row['COST']:
-            processed_row['COST'] = format(float(processed_row['COST']), '.2f')
+            try:
+                processed_row['COST'] = format(float(processed_row['COST']), '.2f')
+            except (ValueError, TypeError):
+                # If COST contains non-numeric values, keep as is
+                pass
             
         processed_rows.append(processed_row)
     
@@ -96,6 +129,9 @@ def process_input_data(input_file_path, output_dir):
     
     # Reorder columns to match the desired output format
     ordered_columns = ['UPC', 'TITLE', 'ARTIST', 'MANUF', 'GENRE', 'CONFIG', 'DEPT', 'MISC', 'LIST', 'PRICE', 'VENDOR', 'COST']
+    for col in ordered_columns:
+        if col not in processed_df.columns:
+            processed_df[col] = ''  # Ensure all columns exist
     processed_df = processed_df[ordered_columns]
     
     # Create output file paths
@@ -120,20 +156,53 @@ def generate_delimited_file(df, output_dir):
     # Create output file path
     text_output_path = os.path.join(output_dir, 'trakdelim.txt')
     
+    # Ensure UPC is treated as a string to preserve leading zeros
+    if 'UPC' in df.columns:
+        df['UPC'] = df['UPC'].astype(str)
+    
     # Open the output file for writing in the specified directory
     with open(text_output_path, 'w') as file:
         
         # Iterate over each row in the DataFrame
         for index, row in df.iterrows():
             # Format the numeric values for the delimited file (no decimal points)
-            # Ensure values are strings before calling replace
-            list_price = str(row['LIST']).replace('.', '') if pd.notna(row['LIST']) else ''
-            price = str(row['PRICE']).replace('.', '') if pd.notna(row['PRICE']) else ''
-            cost = str(row['COST']).replace('.', '') if pd.notna(row['COST']) else ''
+            # Ensure values are strings before calling replace, and handle 'nan' values
+            list_price = str(row['LIST']).replace('.', '') if pd.notna(row['LIST']) and row['LIST'] != '' and str(row['LIST']).lower() != 'nan' else ''
+            price = str(row['PRICE']).replace('.', '') if pd.notna(row['PRICE']) and row['PRICE'] != '' and str(row['PRICE']).lower() != 'nan' else ''
+            cost = str(row['COST']).replace('.', '') if pd.notna(row['COST']) and row['COST'] != '' and str(row['COST']).lower() != 'nan' else ''
+            
+            # Get values for each field, using empty string for any that are missing or 'nan'
+            # Ensure UPC is preserved exactly as it is in the spreadsheet, including leading zeros
+            upc = str(row.get('UPC', ''))
+            upc = '' if upc.lower() == 'nan' else upc
+            
+            title = str(row.get('TITLE', ''))
+            title = '' if title.lower() == 'nan' else title
+            
+            artist = str(row.get('ARTIST', ''))
+            artist = '' if artist.lower() == 'nan' else artist
+            
+            manuf = str(row.get('MANUF', ''))
+            manuf = '' if manuf.lower() == 'nan' else manuf
+            
+            genre = str(row.get('GENRE', ''))
+            genre = '' if genre.lower() == 'nan' else genre
+            
+            misc = str(row.get('MISC', ''))
+            misc = '' if misc.lower() == 'nan' else misc
+            
+            config = str(row.get('CONFIG', ''))
+            config = '' if config.lower() == 'nan' else config
+            
+            dept = str(row.get('DEPT', ''))
+            dept = '' if dept.lower() == 'nan' else dept
+            
+            vendor = str(row.get('VENDOR', ''))
+            vendor = '' if vendor.lower() == 'nan' else vendor
             
             # Format the row data according to the specified layout
             formatted_row = (
-                f"C|{row['UPC']}|{row['TITLE']}|{row['ARTIST']}|{row['MANUF']}|||{row['GENRE']}|||{row['MISC']}|{row['CONFIG']}|||{row['DEPT']}|{list_price}||||||{row['VENDOR']}|{cost}|||||||||{price}"
+                f"C|{upc}|{title}|{artist}|{manuf}|||{genre}|||{misc}|{config}|||{dept}|{list_price}||||||{vendor}|{cost}|||||||||{price}"
             )
 
             # Write the formatted data to the output file
