@@ -165,11 +165,40 @@ def generate_delimited_file(df, output_dir):
         
         # Iterate over each row in the DataFrame
         for index, row in df.iterrows():
-            # Format the numeric values for the delimited file (no decimal points)
-            # Ensure values are strings before calling replace, and handle 'nan' values
-            list_price = str(row['LIST']).replace('.', '') if pd.notna(row['LIST']) and row['LIST'] != '' and str(row['LIST']).lower() != 'nan' else ''
-            price = str(row['PRICE']).replace('.', '') if pd.notna(row['PRICE']) and row['PRICE'] != '' and str(row['PRICE']).lower() != 'nan' else ''
-            cost = str(row['COST']).replace('.', '') if pd.notna(row['COST']) and row['COST'] != '' and str(row['COST']).lower() != 'nan' else ''
+            # Process monetary values to ensure they always have cents positions without the decimal point
+            
+            # Process LIST column - format as whole number with implied decimal (e.g., 1100 for $11.00)
+            if pd.notna(row['LIST']) and row['LIST'] != '' and str(row['LIST']).lower() != 'nan':
+                try:
+                    # Convert to float, format with 2 decimal places, then remove the decimal point
+                    list_value = float(str(row['LIST']).replace('$', '').strip())
+                    list_price = f"{list_value:.2f}".replace('.', '')
+                except (ValueError, TypeError):
+                    list_price = ''
+            else:
+                list_price = ''
+                
+            # Process PRICE column - format as whole number with implied decimal (e.g., 950 for $9.50)
+            if pd.notna(row['PRICE']) and row['PRICE'] != '' and str(row['PRICE']).lower() != 'nan':
+                try:
+                    # Convert to float, format with 2 decimal places, then remove the decimal point
+                    price_value = float(str(row['PRICE']).replace('$', '').strip())
+                    price = f"{price_value:.2f}".replace('.', '')
+                except (ValueError, TypeError):
+                    price = ''
+            else:
+                price = ''
+                
+            # Process COST column - format as whole number with implied decimal (e.g., 1000 for $10.00)
+            if pd.notna(row['COST']) and row['COST'] != '' and str(row['COST']).lower() != 'nan':
+                try:
+                    # Convert to float, format with 2 decimal places, then remove the decimal point
+                    cost_value = float(str(row['COST']).replace('$', '').strip())
+                    cost = f"{cost_value:.2f}".replace('.', '')
+                except (ValueError, TypeError):
+                    cost = ''
+            else:
+                cost = ''
             
             # Get values for each field, using empty string for any that are missing or 'nan'
             # Ensure UPC is preserved exactly as it is in the spreadsheet, including leading zeros
