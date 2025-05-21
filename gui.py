@@ -223,6 +223,19 @@ class FileConverterApp:
             width=20
         ).grid(row=3, column=1, sticky=tk.E, padx=5, pady=10)
         
+        # Add next steps note
+        next_steps_text = "Next steps: [K] Optional Modules > [D]atabase Menu > [A]lternate Database Posting > [T]rak Delimited Database > [U]pdate Database."
+        next_steps_label = ttk.Label(scp_frame, text=next_steps_text)
+        next_steps_label.grid(row=4, column=0, columnspan=3, sticky=tk.EW, padx=5, pady=10)
+        
+        # Make the next steps text wrap dynamically based on window width
+        def update_wraplength(event):
+            # Set wraplength to frame width minus some padding
+            next_steps_label.configure(wraplength=event.width - 20)
+            
+        # Bind the label's parent frame to configure event to update wraplength on resize
+        scp_frame.bind("<Configure>", update_wraplength)
+        
         # Navigation buttons
         nav_frame = ttk.Frame(self.page3)
         nav_frame.pack(fill=tk.X, padx=10, pady=10)
