@@ -47,7 +47,7 @@ def get_cd_price(cost):
     elif cost <= 20.99:
         return 31.99
     else:
-        return cost * 1.4  # If cost > 20.99, price = cost * 1.4
+        return cost * 1.5  # If cost > 20.99, price = cost * 1.5 (50% markup)
 
 def get_lp_price(cost):
     """
@@ -154,4 +154,4 @@ def get_lp_price(cost):
     elif cost <= 49.99:
         return 76.99
     else:
-        return cost * 1.4  # If cost > 49.99, price = cost * 1.4
+        return cost * 1.5  # If cost > 49.99, price = cost * 1.5 (50% markup)
