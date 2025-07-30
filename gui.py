@@ -367,12 +367,10 @@ class FileConverterApp:
         try:
             self.root.update()
             
-            # Read the Excel file with UPC column as string to preserve leading zeros
-            df = pd.read_excel(excel_path, dtype={'UPC': str})
-            
-            # Generate the delimited text file
+            # Generate the delimited text file by passing the Excel file path
+            # This allows the function to read it with proper data types
             self.log("Generating TRAK file...")
-            text_path = generate_delimited_file(df, output_dir)
+            text_path = generate_delimited_file(excel_path, output_dir)
             self.text_output_path.set(text_path)
             
             self.log(f"Created TRAK file: {text_path}")
