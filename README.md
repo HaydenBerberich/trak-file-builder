@@ -60,19 +60,69 @@ A cross-platform GUI application for creating and uploading TRAK delimited files
 
 ## Usage
 
-1. Run the application:
-   - Windows: Double-click on `main.py` or run `python main.py` in Command Prompt
-   - macOS/Linux: Run `python3 main.py` in Terminal
+### Step 1: Open the Application
+1. Launch **Trak File Builder** from your desktop.  
+2. The main dashboard will appear with options for input, output, and building files.
 
-2. Using the application:
-   - **Step 1**: Create a new spreadsheet or select an existing Excel file
-   - **Step 2**: Review and edit the processed spreadsheet (opens in your default spreadsheet application)
-   - **Step 3**: Generate and review the TRAK delimited file
-   - **Step 4**: Upload the file to your TRAK server
+---
 
-3. Upload functionality:
-   - Enter your server credentials (username, host, target path)
-   - Click "Upload TRAK File"
+### Step 2: Prepare the Input Spreadsheet
+1. **Browse for Input File**  
+   - Click **Browse** to select an existing spreadsheet.  
+   - Ensure the spreadsheet contains all **required columns**.  
+
+2. **Create a Blank Template (if needed)**  
+   - Click **Create New** to generate a template spreadsheet.  
+   - Choose a **file path** where the template will be created and saved.  
+   - ⚠️ *Do not change the file location after selecting this path.*  
+
+3. **Name the File** appropriately.
+
+---
+
+### Step 3: Fill in Spreadsheet Data
+- **Required Columns (red):** Must be filled manually.  
+- **Auto-populated Columns (black):** Automatically filled based on required data.  
+   - You may overwrite these values if necessary by entering your own data.  
+- Save the spreadsheet once all required information is complete. 
+
+---
+
+### Step 4: Build and Review the Spreadsheet
+1. Change the **output directory** if desired (*recommended to keep the default*).  
+2. Click **Build Spreadsheet**.  
+3. Click **View/Edit Spreadsheet** to review.  
+   - Verify auto-populated data.  
+   - Make any final changes.  
+   - Save again if changes are made.  
+
+---
+
+### Step 5: Build and Review the Trak File
+1. Click **Build Trak File**.  
+2. Click **View/Edit Trak File** to verify the file.  
+3. Confirm that all information is correct before uploading.  
+
+---
+
+### Step 6: Upload the Trak File
+1. Enter your **username, host, and target path**.  
+   - These will auto-populate with default values.  
+   - ⚠️ *Do not change unless you are certain of what you’re doing.*  
+2. Click **Upload Trak File**.  
+3. Enter the password: `trak`.  
+
+---
+
+### Step 7: Verify Upload in PuTTY
+1. Open a **PuTTY session** into Trak.  
+2. From the main page, navigate through the menu:  
+   - `[k] Optional Modules` →  
+   - `[d] Database Menu` →  
+   - `[a] Alternate Database Posting` →  
+   - `[t] Trak Delimited Database` →  
+   - `[u] Update Database`  
+3. Search for UPCs from the upload to verify the file was installed correctly.  
 
 ## File Format
 
