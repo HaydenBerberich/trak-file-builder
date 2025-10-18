@@ -1,505 +1,317 @@
 """
 GUI Application for TRAK File Builder.
+Supports optional multi-hop SSH upload (jump host) with site selection (St. Louis, Springfield, or Custom).
 """
 import os
 import sys
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, simpledialog
+from tkinter import filedialog, messagebox, ttk
 import subprocess
 import pandas as pd
 
 from utils import open_with_default_app
 from file_processor import process_input_data, generate_delimited_file, create_new_spreadsheet
 
+
 class FileConverterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TRAK File Converter")
-        self.root.geometry("700x800")  # Increased height from 600 to 700
-        self.root.minsize(600, 600)  # Increased minimum height from 500 to 600
-        
-        # Configure root to be responsive
+        self.root.geometry("700x850")
+        self.root.minsize(600, 700)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        
-        # Variables
+
+        # ---------- Site Configurations ----------
+        self.sites = {
+            "St. Louis": {"jump": "100.107.39.118", "final": "192.168.12.99", "user": "trak", "password": "trak"},
+            "Springfield": {"jump": "100.118.199.62", "final": "192.168.1.99", "user": "trak", "password": "trak"},
+            "Custom": {"jump": "", "final": "", "user": "", "password": ""}
+        }
+        default_site = "St. Louis"
+
+        # ---------- Variables ----------
         self.input_file_path = tk.StringVar()
-        self.output_dir = tk.StringVar()
-        self.output_dir.set(os.getcwd())  # Default to current directory
+        self.output_dir = tk.StringVar(value=os.getcwd())
         self.excel_output_path = tk.StringVar()
         self.text_output_path = tk.StringVar()
-        
-        # SCP upload variables
-        self.scp_username = tk.StringVar(value="trak")
-        self.scp_host = tk.StringVar(value="192.168.12.99")
+
+        self.site_selection = tk.StringVar(value=default_site)
+        self.jump_host = tk.StringVar(value=self.sites[default_site]["jump"])
+        self.final_host = tk.StringVar(value=self.sites[default_site]["final"])
+        self.scp_username = tk.StringVar(value=self.sites[default_site]["user"])
+        self.scp_password = tk.StringVar(value=self.sites[default_site]["password"])
         self.scp_target_path = tk.StringVar(value="/trak/data/trakdelim.txt")
-        
-        # Main frame
+
+        # ---------- Layout ----------
         main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky="nsew")  # Use grid instead of pack for the main frame
-        
-        # Configure main_frame rows and columns
+        main_frame.grid(row=0, column=0, sticky="nsew")
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(0, weight=3)  # Notebook gets more space
-        main_frame.rowconfigure(1, weight=1)  # Log area gets less space
-        
-        # Create the notebook (tabbed interface)
+        main_frame.rowconfigure(0, weight=3)
+        main_frame.rowconfigure(1, weight=1)
+
         self.notebook = ttk.Notebook(main_frame)
-        self.notebook.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)  # Use grid instead of pack
-        
-        # Create pages
-        self.page1 = ttk.Frame(self.notebook)
-        self.page2 = ttk.Frame(self.notebook)
-        self.page3 = ttk.Frame(self.notebook)
-        
-        # Configure page frames to be responsive
-        for page in [self.page1, self.page2, self.page3]:
-            page.columnconfigure(0, weight=1)
-            page.rowconfigure(0, weight=1)
-        
-        # Add pages to notebook
+        self.notebook.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.page1, self.page2, self.page3 = ttk.Frame(self.notebook), ttk.Frame(self.notebook), ttk.Frame(self.notebook)
+        for p in [self.page1, self.page2, self.page3]:
+            p.columnconfigure(0, weight=1)
+            p.rowconfigure(0, weight=1)
+
         self.notebook.add(self.page1, text="1. Select Input")
         self.notebook.add(self.page2, text="2. Edit Spreadsheet")
         self.notebook.add(self.page3, text="3. TRAK File")
-        
-        # Disable pages 2 and 3 initially
         self.notebook.tab(1, state="disabled")
         self.notebook.tab(2, state="disabled")
-        
-        # Create content for each page
+
+        # Build UI pages
         self.create_page1()
         self.create_page2()
         self.create_page3()
-        
-        # Log area (common to all pages)
+
+        # ---------- Log Area ----------
         log_frame = ttk.LabelFrame(main_frame, text="Log", padding="10")
-        log_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)  # Use grid instead of pack
-        
-        # Configure log_frame
+        log_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
-        
         self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD)
-        self.log_text.grid(row=0, column=0, sticky="nsew")  # Use grid instead of pack
-        
-        # Scrollbar for log - place it properly
+        self.log_text.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text.config(yscrollcommand=scrollbar.set)
-    
-    def create_page1(self):
-        """Create content for the first page (Input Selection)"""
-        # Input file section
-        input_frame = ttk.LabelFrame(self.page1, text="Select Input Excel File", padding="20")
-        input_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Configure input_frame grid weights
-        input_frame.columnconfigure(0, weight=0)  # Labels don't need to expand
-        input_frame.columnconfigure(1, weight=1)  # Entry fields should expand
-        input_frame.columnconfigure(2, weight=0)  # Buttons don't need to expand
-        input_frame.columnconfigure(3, weight=0)  # Buttons don't need to expand
-        
-        ttk.Label(input_frame, text="Excel File:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=15)
-        ttk.Entry(input_frame, textvariable=self.input_file_path, width=50).grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
-        browse_button = ttk.Button(input_frame, text="Browse...", command=self.browse_input_file)
-        browse_button.grid(row=0, column=2, padx=5, pady=15)
-        
-        # Add Create New button
-        create_new_button = ttk.Button(input_frame, text="Create New", command=self.create_new_spreadsheet)
-        create_new_button.grid(row=0, column=3, padx=5, pady=15)
-        
-        # Add required and optional columns information
-        ttk.Label(input_frame, text="Required Columns: UPC, TITLE, ARTIST, MANUF, GENRE, CONFIG, COST", 
-                 foreground="red").grid(row=1, column=0, columnspan=4, sticky=tk.W, padx=5, pady=2)
-        ttk.Label(input_frame, text="Optional Columns: DEPT, MISC, LIST, PRICE, VENDOR",
-                 foreground="blue").grid(row=2, column=0, columnspan=4, sticky=tk.W, padx=5, pady=2)
-        
-        # Output directory
-        ttk.Label(input_frame, text="Output Directory:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=15)
-        ttk.Entry(input_frame, textvariable=self.output_dir, width=50).grid(row=3, column=1, sticky=tk.EW, padx=5, pady=15)
-        ttk.Button(input_frame, text="Browse...", command=self.browse_output_dir).grid(row=3, column=2, padx=5, pady=15)
-        
-        # Process button
-        button_frame = ttk.Frame(self.page1)
-        button_frame.pack(fill=tk.X, padx=10, pady=20)
-        
-        # Configure button_frame to allow button to stay right-aligned
-        button_frame.columnconfigure(0, weight=1)
-        
-        process_button = ttk.Button(
-            button_frame, 
-            text="Build Spreadsheet", 
-            command=self.process_to_excel,
-            width=20
-        )
-        process_button.grid(row=0, column=0, sticky=tk.E, padx=5)
-    
-    def create_page2(self):
-        """Create content for the second page (Spreadsheet View/Edit)"""
-        # Spreadsheet section
-        sheet_frame = ttk.LabelFrame(self.page2, text="Generated Spreadsheet", padding="20")
-        sheet_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Configure the sheet_frame to be responsive
-        sheet_frame.columnconfigure(0, weight=0)  # Label column
-        sheet_frame.columnconfigure(1, weight=1)  # Entry column
-        sheet_frame.rowconfigure(0, weight=0)     # Fixed height for the path row
-        sheet_frame.rowconfigure(1, weight=1)     # Button frame can expand
-        
-        ttk.Label(sheet_frame, text="Spreadsheet Path:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=15)
-        ttk.Entry(sheet_frame, textvariable=self.excel_output_path, width=50, state="readonly").grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
-        
-        button_frame = ttk.Frame(sheet_frame)
-        button_frame.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=15)
-        
-        # Make the button frame responsive
-        button_frame.columnconfigure(0, weight=1)  # Left side gets space
-        button_frame.columnconfigure(1, weight=1)  # Right side gets space
-        
-        ttk.Button(
-            button_frame, 
-            text="View/Edit Spreadsheet", 
-            command=self.open_excel_file,
-            width=25
-        ).grid(row=0, column=0, sticky=tk.W, padx=5)
-        
-        ttk.Button(
-            button_frame, 
-            text="Build TRAK File", 
-            command=self.process_to_text,
-            width=25
-        ).grid(row=0, column=1, sticky=tk.E, padx=5)
-    
-    def create_page3(self):
-        """Create content for the third page (TRAK File View/Upload)"""
-        # Text file section
-        text_frame = ttk.LabelFrame(self.page3, text="Generated TRAK File", padding="20")
-        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Configure text_frame to be responsive
-        text_frame.columnconfigure(0, weight=0)  # Label column
-        text_frame.columnconfigure(1, weight=1)  # Entry column
-        text_frame.rowconfigure(0, weight=0)     # Fixed height for path row
-        text_frame.rowconfigure(1, weight=1)     # Button frame can expand
-        
-        ttk.Label(text_frame, text="TRAK File Path:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=15)
-        ttk.Entry(text_frame, textvariable=self.text_output_path, width=50, state="readonly").grid(row=0, column=1, sticky=tk.EW, padx=5, pady=15)
-        
-        button_frame = ttk.Frame(text_frame)
-        button_frame.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=15)
-        
-        # Configure button_frame to be responsive
-        button_frame.columnconfigure(0, weight=1)
-        
-        ttk.Button(
-            button_frame, 
-            text="View/Edit TRAK File", 
-            command=self.open_text_file,
-            width=25
-        ).grid(row=0, column=0, sticky=tk.W, padx=5)
-        
-        # SCP upload section
-        scp_frame = ttk.LabelFrame(self.page3, text="Upload to TRAK Server", padding="10")
-        scp_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Configure scp_frame to be responsive
-        scp_frame.columnconfigure(0, weight=0)  # Label column
-        scp_frame.columnconfigure(1, weight=1)  # Entry/button column
-        scp_frame.columnconfigure(2, weight=0)  # Extra column if needed
-        
-        ttk.Label(scp_frame, text="Username:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        ttk.Entry(scp_frame, textvariable=self.scp_username, width=15).grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
-        
-        ttk.Label(scp_frame, text="Host:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
-        ttk.Entry(scp_frame, textvariable=self.scp_host, width=20).grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
-        
-        ttk.Label(scp_frame, text="Target Path:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
-        ttk.Entry(scp_frame, textvariable=self.scp_target_path, width=50).grid(row=2, column=1, columnspan=2, sticky=tk.EW, padx=5, pady=5)
-        
-        ttk.Button(
-            scp_frame, 
-            text="Upload TRAK File", 
-            command=self.upload_file,
-            width=20
-        ).grid(row=3, column=1, sticky=tk.E, padx=5, pady=10)
-        
-        # Add next steps note
-        next_steps_text = "Next steps: [K] Optional Modules > [D]atabase Menu > [A]lternate Database Posting > [T]rak Delimited Database > [U]pdate Database."
-        next_steps_label = ttk.Label(scp_frame, text=next_steps_text)
-        next_steps_label.grid(row=4, column=0, columnspan=3, sticky=tk.EW, padx=5, pady=10)
-        
-        # Make the next steps text wrap dynamically based on window width
-        def update_wraplength(event):
-            # Set wraplength to frame width minus some padding
-            next_steps_label.configure(wraplength=event.width - 20)
-            
-        # Bind the label's parent frame to configure event to update wraplength on resize
-        scp_frame.bind("<Configure>", update_wraplength)
-        
-        # Navigation buttons
-        nav_frame = ttk.Frame(self.page3)
-        nav_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        # Configure nav_frame to be responsive
-        nav_frame.columnconfigure(0, weight=1)
-        nav_frame.columnconfigure(1, weight=1)
-        
-        ttk.Button(
-            nav_frame, 
-            text="Start Over", 
-            command=self.start_over,
-            width=15
-        ).grid(row=0, column=0, sticky=tk.W, padx=5)
-    
-    def browse_input_file(self):
-        filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
-        filename = filedialog.askopenfilename(
-            title="Select Input Excel File",
-            filetypes=filetypes
-        )
-        if filename:
-            self.input_file_path.set(filename)
-            self.log("Selected input file: " + filename)
-    
-    def browse_output_dir(self):
-        directory = filedialog.askdirectory(
-            title="Select Output Directory"
-        )
-        if directory:
-            self.output_dir.set(directory)
-            self.log("Selected output directory: " + directory)
-    
-    def create_new_spreadsheet(self):
-        """Create a new spreadsheet with required and optional columns"""
-        # Ask user for the save location
-        filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
-        file_path = filedialog.asksaveasfilename(
-            title="Create New Spreadsheet",
-            defaultextension=".xlsx",
-            filetypes=filetypes
-        )
-        
-        if not file_path:
-            return  # User cancelled
-            
-        try:
-            # Create a new spreadsheet using the file_processor module
-            if create_new_spreadsheet(file_path):
-                # Set the input file path to the new file
-                self.input_file_path.set(file_path)
-                self.log(f"Created new spreadsheet: {file_path}")
-                
-                # Open the file with the default spreadsheet editor
-                if open_with_default_app(file_path):
-                    self.log(f"Opened new spreadsheet: {file_path}")
-                else:
-                    self.log(f"Error: Cannot open file {file_path}")
-                    messagebox.showerror("Error", f"Cannot open file: {file_path}")
-            else:
-                self.log("Error creating new spreadsheet")
-                messagebox.showerror("Error", "Failed to create new spreadsheet")
-                
-        except Exception as e:
-            error_message = str(e)
-            self.log(f"Error creating spreadsheet: {error_message}")
-            messagebox.showerror("Error", f"An error occurred while creating the spreadsheet:\n{error_message}")
-    
-    def process_to_excel(self):
-        """Process the input file to create the Excel spreadsheet"""
-        # Get the input file path
-        input_file = self.input_file_path.get()
-        output_dir = self.output_dir.get()
-        
-        if not input_file:
-            messagebox.showerror("Error", "Please select an input Excel file.")
-            return
-            
-        if not os.path.exists(input_file):
-            messagebox.showerror("Error", f"Input file does not exist: {input_file}")
-            return
-        
-        if not output_dir:
-            messagebox.showerror("Error", "Please select an output directory.")
-            return
-            
-        if not os.path.exists(output_dir):
-            messagebox.showerror("Error", f"Output directory does not exist: {output_dir}")
-            return
-        
-        try:
-            self.root.update()
-            
-            # Process the input data and create Excel
-            self.log("Processing input data...")
-            processed_df, excel_path = process_input_data(input_file, output_dir)
-            self.excel_output_path.set(excel_path)
-            
-            self.log(f"Created Excel file: {excel_path}")
-            
-            # Enable page 2 and switch to it
-            self.notebook.tab(1, state="normal")
-            self.notebook.select(1)
-            
-        except Exception as e:
-            error_message = str(e)
-            self.log("ERROR: " + error_message)
-            messagebox.showerror("Error", f"An error occurred during processing:\n{error_message}")
-    
-    def open_excel_file(self):
-        """Open the Excel file with the default application"""
-        excel_path = self.excel_output_path.get()
-        if excel_path:
-            if open_with_default_app(excel_path):
-                self.log(f"Opened spreadsheet: {excel_path}")
-            else:
-                self.log(f"Error: Cannot open file {excel_path}")
-                messagebox.showerror("Error", f"Cannot open file: {excel_path}")
-    
-    def process_to_text(self):
-        """Generate the delimited text file from the Excel spreadsheet"""
-        excel_path = self.excel_output_path.get()
-        output_dir = self.output_dir.get()
-        
-        if not excel_path or not os.path.exists(excel_path):
-            messagebox.showerror("Error", "Spreadsheet file not found. Please build it first.")
-            return
-            
-        try:
-            self.root.update()
-            
-            # Generate the delimited text file by passing the Excel file path
-            # This allows the function to read it with proper data types
-            self.log("Generating TRAK file...")
-            text_path = generate_delimited_file(excel_path, output_dir)
-            self.text_output_path.set(text_path)
-            
-            self.log(f"Created TRAK file: {text_path}")
-            
-            # Enable page 3 and switch to it
-            self.notebook.tab(2, state="normal")
-            self.notebook.select(2)
-            
-        except Exception as e:
-            error_message = str(e)
-            self.log("ERROR: " + error_message)
-            messagebox.showerror("Error", f"An error occurred during text file generation:\n{error_message}")
-    
-    def open_text_file(self):
-        """Open the text file with the default text editor"""
-        text_path = self.text_output_path.get()
-        if text_path:
-            if open_with_default_app(text_path):
-                self.log(f"Opened TRAK file: {text_path}")
-            else:
-                self.log(f"Error: Cannot open file {text_path}")
-                messagebox.showerror("Error", f"Cannot open file: {text_path}")
-    
-    def upload_file(self):
-        """Upload the TRAK file to the remote server using Paramiko (cross-platform SSH/SCP)"""
-        try:
-            # Check if paramiko is installed
-            try:
-                import paramiko
-            except ImportError:
-                self.log("The 'paramiko' package is required for file uploads.")
-                if messagebox.askyesno("Install Required Package", 
-                                      "The Python package 'paramiko' is required for file uploads.\nWould you like to install it now?"):
-                    self.log("Installing paramiko package...")
-                    self.root.update()
-                    
-                    # Use pip to install paramiko
-                    try:
-                        subprocess.check_call([sys.executable, "-m", "pip", "install", "paramiko"])
-                        self.log("Paramiko installed successfully.")
-                        # Import paramiko now that it's installed
-                        import paramiko
-                    except Exception as e:
-                        self.log(f"Error installing paramiko: {e}")
-                        messagebox.showerror("Installation Error", 
-                                            f"Failed to install paramiko. Please install it manually using:\npip install paramiko")
-                        return
-                else:
-                    self.log("Upload cancelled - required package not installed")
-                    return
 
-            # Determine the file path to upload
-            text_path = self.text_output_path.get()
-            
-            # Check if the file exists
-            if not os.path.exists(text_path):
-                messagebox.showerror("Error", f"File not found: {text_path}")
+    # ---------- PAGE 1 ----------
+    def create_page1(self):
+        frame = ttk.LabelFrame(self.page1, text="Select Input Excel File", padding="20")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        frame.columnconfigure(1, weight=1)
+
+        ttk.Label(frame, text="Excel File:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(frame, textvariable=self.input_file_path).grid(row=0, column=1, sticky=tk.EW, padx=5)
+        ttk.Button(frame, text="Browse...", command=self.browse_input_file).grid(row=0, column=2, padx=5)
+        ttk.Button(frame, text="Create New", command=self.create_new_spreadsheet).grid(row=0, column=3, padx=5)
+
+        ttk.Label(frame, text="Required Columns: UPC, TITLE, ARTIST, MANUF, GENRE, CONFIG, COST", foreground="red")\
+            .grid(row=1, column=0, columnspan=4, sticky=tk.W)
+        ttk.Label(frame, text="Optional Columns: DEPT, MISC, LIST, PRICE, VENDOR", foreground="blue")\
+            .grid(row=2, column=0, columnspan=4, sticky=tk.W)
+
+        ttk.Label(frame, text="Output Directory:").grid(row=3, column=0, sticky=tk.W)
+        ttk.Entry(frame, textvariable=self.output_dir).grid(row=3, column=1, sticky=tk.EW, padx=5)
+        ttk.Button(frame, text="Browse...", command=self.browse_output_dir).grid(row=3, column=2, padx=5)
+
+        ttk.Button(self.page1, text="Build Spreadsheet", command=self.process_to_excel, width=20)\
+            .pack(pady=20)
+
+    # ---------- PAGE 2 ----------
+    def create_page2(self):
+        frame = ttk.LabelFrame(self.page2, text="Generated Spreadsheet", padding="20")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        frame.columnconfigure(1, weight=1)
+
+        ttk.Label(frame, text="Spreadsheet Path:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(frame, textvariable=self.excel_output_path, state="readonly").grid(row=0, column=1, sticky=tk.EW, padx=5)
+        ttk.Button(frame, text="View/Edit Spreadsheet", command=self.open_excel_file, width=25)\
+            .grid(row=1, column=0, sticky=tk.W, padx=5, pady=10)
+        ttk.Button(frame, text="Build TRAK File", command=self.process_to_text, width=25)\
+            .grid(row=1, column=1, sticky=tk.E, padx=5, pady=10)
+
+    # ---------- PAGE 3 ----------
+    def create_page3(self):
+        frame = ttk.LabelFrame(self.page3, text="Generated TRAK File", padding="20")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        frame.columnconfigure(1, weight=1)
+
+        ttk.Label(frame, text="TRAK File Path:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(frame, textvariable=self.text_output_path, state="readonly").grid(row=0, column=1, sticky=tk.EW, padx=5)
+        ttk.Button(frame, text="View/Edit TRAK File", command=self.open_text_file).grid(row=1, column=0, sticky=tk.W, pady=5)
+
+        # --- Upload section ---
+        upload_frame = ttk.LabelFrame(self.page3, text="Upload via SSH (Optional Jump Host)", padding="10")
+        upload_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        upload_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(upload_frame, text="Select Location:").grid(row=0, column=0, sticky=tk.W)
+        site_dropdown = ttk.Combobox(upload_frame, textvariable=self.site_selection,
+                                     values=list(self.sites.keys()), state="readonly")
+        site_dropdown.grid(row=0, column=1, sticky=tk.W, pady=3)
+        site_dropdown.bind("<<ComboboxSelected>>", self.update_site_settings)
+
+        ttk.Label(upload_frame, text="Jump Host:").grid(row=1, column=0, sticky=tk.W)
+        self.jump_entry = ttk.Entry(upload_frame, textvariable=self.jump_host, width=25, state="readonly")
+        self.jump_entry.grid(row=1, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(upload_frame, text="Final Host:").grid(row=2, column=0, sticky=tk.W)
+        self.final_entry = ttk.Entry(upload_frame, textvariable=self.final_host, width=25, state="readonly")
+        self.final_entry.grid(row=2, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(upload_frame, text="Username:").grid(row=3, column=0, sticky=tk.W)
+        self.user_entry = ttk.Entry(upload_frame, textvariable=self.scp_username, width=25, state="readonly")
+        self.user_entry.grid(row=3, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(upload_frame, text="Password:").grid(row=4, column=0, sticky=tk.W)
+        self.pass_entry = ttk.Entry(upload_frame, textvariable=self.scp_password, width=25, show="*", state="readonly")
+        self.pass_entry.grid(row=4, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(upload_frame, text="Target Path:").grid(row=5, column=0, sticky=tk.W)
+        ttk.Entry(upload_frame, textvariable=self.scp_target_path, width=50).grid(row=5, column=1, sticky=tk.EW, pady=3)
+
+        ttk.Button(upload_frame, text="Upload TRAK File", command=self.upload_file, width=20)\
+            .grid(row=6, column=1, sticky=tk.E, pady=10)
+
+        ttk.Label(upload_frame,
+                  text="Next steps: [K] Optional Modules > [D]atabase Menu > [A]lternate Database Posting > "
+                       "[T]rak Delimited Database > [U]pdate Database.",
+                  wraplength=500).grid(row=7, column=0, columnspan=2, pady=10)
+
+    def update_site_settings(self, event=None):
+        site = self.site_selection.get()
+        config = self.sites.get(site, self.sites["Custom"])
+        self.jump_host.set(config["jump"])
+        self.final_host.set(config["final"])
+        self.scp_username.set(config["user"])
+        self.scp_password.set(config["password"])
+        state = "normal" if site == "Custom" else "readonly"
+        self._set_entry_state(state)
+        self.log(f"Site set to {site}: jump={self.jump_host.get()}, final={self.final_host.get()}")
+
+    def _set_entry_state(self, state):
+        self.jump_entry.config(state=state)
+        self.final_entry.config(state=state)
+        self.user_entry.config(state=state)
+        self.pass_entry.config(state=state)
+
+    # ---------- File Actions ----------
+    def browse_input_file(self):
+        f = filedialog.askopenfilename(title="Select Input Excel File", filetypes=[("Excel files", "*.xlsx")])
+        if f:
+            self.input_file_path.set(f)
+            self.log(f"Selected input file: {f}")
+
+    def browse_output_dir(self):
+        d = filedialog.askdirectory(title="Select Output Directory")
+        if d:
+            self.output_dir.set(d)
+            self.log(f"Selected output directory: {d}")
+
+    def create_new_spreadsheet(self):
+        f = filedialog.asksaveasfilename(title="Create New Spreadsheet", defaultextension=".xlsx",
+                                         filetypes=[("Excel files", "*.xlsx")])
+        if not f:
+            return
+        if create_new_spreadsheet(f):
+            self.input_file_path.set(f)
+            open_with_default_app(f)
+            self.log(f"Created new spreadsheet: {f}")
+
+    def process_to_excel(self):
+        inp = self.input_file_path.get()
+        out = self.output_dir.get()
+        if not os.path.exists(inp):
+            messagebox.showerror("Error", "Input file not found.")
+            return
+        self.log("Processing input data...")
+        df, path = process_input_data(inp, out)
+        self.excel_output_path.set(path)
+        self.log(f"Created Excel: {path}")
+        self.notebook.tab(1, state="normal")
+        self.notebook.select(1)
+
+    def open_excel_file(self):
+        open_with_default_app(self.excel_output_path.get())
+
+    def process_to_text(self):
+        excel = self.excel_output_path.get()
+        out = self.output_dir.get()
+        if not os.path.exists(excel):
+            messagebox.showerror("Error", "Spreadsheet not found.")
+            return
+        self.log("Generating TRAK file...")
+        text_path = generate_delimited_file(excel, out)
+        self.text_output_path.set(text_path)
+        self.log(f"Created TRAK file: {text_path}")
+        self.notebook.tab(2, state="normal")
+        self.notebook.select(2)
+
+    def open_text_file(self):
+        open_with_default_app(self.text_output_path.get())
+
+    # ---------- Upload ----------
+    def upload_file(self):
+        try:
+            import paramiko
+        except ImportError:
+            if messagebox.askyesno("Missing Package", "Paramiko not installed. Install now?"):
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "paramiko"])
+                import paramiko
+            else:
                 return
-            
-            # Get SCP parameters
-            username = self.scp_username.get()
-            host = self.scp_host.get()
-            target_path = self.scp_target_path.get()
-            
-            # Prompt for password
-            password = simpledialog.askstring("Password", "Enter password:", show='*')
-            if password is None:
-                # User cancelled the password dialog
-                self.log("Upload cancelled - no password provided")
-                return
-                
-            self.log(f"Connecting to {host} as {username}...")
-            self.root.update()
-                
-            # Create SSH client
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
-            try:
-                # Connect to the server
-                ssh.connect(hostname=host, username=username, password=password)
-                self.log("Connected to server. Uploading file...")
-                self.root.update()
-                
-                # Upload the file using SCP
-                with ssh.open_sftp() as sftp:
-                    sftp.put(text_path, target_path)
-                    
-                self.log("Upload successful!")
-                messagebox.showinfo("Success", "File uploaded successfully!")
-                
-            except paramiko.AuthenticationException:
-                self.log("Authentication failed. Check username and password.")
-                messagebox.showerror("Authentication Error", "Failed to authenticate. Check username and password.")
-            except paramiko.SSHException as e:
-                self.log(f"SSH connection error: {str(e)}")
-                messagebox.showerror("Connection Error", f"SSH connection error: {str(e)}")
-            except paramiko.sftp.SFTPError as e:
-                self.log(f"SFTP error: {str(e)}")
-                messagebox.showerror("SFTP Error", f"SFTP error during upload: {str(e)}")
-            except Exception as e:
-                self.log(f"Error during upload: {str(e)}")
-                messagebox.showerror("Upload Error", f"Error during upload: {str(e)}")
-            finally:
-                # Close the SSH connection
-                ssh.close()
-                    
+
+        local_path = self.text_output_path.get()
+        if not os.path.exists(local_path):
+            messagebox.showerror("Error", f"File not found: {local_path}")
+            return
+
+        jump_host = self.jump_host.get().strip()
+        final_host = self.final_host.get().strip()
+        username = self.scp_username.get().strip()
+        password = self.scp_password.get().strip()
+        target_path = self.scp_target_path.get().strip()
+
+        from paramiko import SSHClient, AutoAddPolicy
+
+        try:
+            if jump_host:
+                # --- Connect via jump host ---
+                self.log(f"Connecting to jump host {jump_host}...")
+                jump = SSHClient()
+                jump.set_missing_host_key_policy(AutoAddPolicy())
+                jump.connect(jump_host, username=username, password=password)
+                self.log(f"Connected to jump host {jump_host}")
+
+                trans = jump.get_transport()
+                chan = trans.open_channel("direct-tcpip", (final_host, 22), ("127.0.0.1", 0))
+
+                final = SSHClient()
+                final.set_missing_host_key_policy(AutoAddPolicy())
+                final.connect(final_host, username=username, password=password, sock=chan)
+                self.log(f"Connected to final host {final_host} via {jump_host}")
+            else:
+                # --- Direct connection ---
+                self.log(f"Connecting directly to {final_host}...")
+                final = SSHClient()
+                final.set_missing_host_key_policy(AutoAddPolicy())
+                final.connect(final_host, username=username, password=password)
+                self.log(f"Connected directly to {final_host}")
+
+            # --- Upload file ---
+            with final.open_sftp() as sftp:
+                self.log(f"Uploading {os.path.basename(local_path)} to {target_path}...")
+                sftp.put(local_path, target_path)
+
+            messagebox.showinfo("Success", f"Uploaded to {final_host}:{target_path}")
+            self.log("✅ Upload complete.")
+
         except Exception as e:
-            error_message = str(e)
-            self.log(f"Upload error: {error_message}")
-            messagebox.showerror("Error", f"An error occurred during upload:\n{error_message}")
-    
-    def start_over(self):
-        """Reset the application to start a new conversion"""
-        # Clear the output paths
-        self.excel_output_path.set("")
-        self.text_output_path.set("")
-        
-        # Disable pages 2 and 3
-        self.notebook.tab(1, state="disabled")
-        self.notebook.tab(2, state="disabled")
-        
-        # Switch to page 1
-        self.notebook.select(0)
-        
-        self.log("Started a new conversion process")
-    
-    def log(self, message):
-        """Add a message to the log text area"""
-        self.log_text.insert(tk.END, message + "\n")
+            self.log(f"Upload error: {e}")
+            messagebox.showerror("Upload Error", str(e))
+        finally:
+            try:
+                final.close()
+            except Exception:
+                pass
+            try:
+                if jump_host:
+                    jump.close()
+            except Exception:
+                pass
+
+    def log(self, msg):
+        self.log_text.insert(tk.END, msg + "\n")
         self.log_text.see(tk.END)
         self.log_text.update()
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = FileConverterApp(root)
+    root.mainloop()
