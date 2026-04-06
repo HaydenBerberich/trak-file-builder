@@ -69,23 +69,26 @@ def process_input_data(input_file_path, output_dir):
     for index, row in df.iterrows():
         processed_row = row.copy()
         
-        # Pad UPC with leading zeros to ensure it's at least 12 digits
+        # Pad UPC with leading zeros to ensure it's at least 12 digits,
+        # unless it is a size-suffixed identifier that should stay literal.
         if processed_row['UPC'] and processed_row['UPC'] != 'nan' and str(processed_row['UPC']).strip():
             # UPC is already a string, preserve it as much as possible
             upc = str(processed_row['UPC']).strip()
-            
-            # Only remove non-digit characters if absolutely necessary
-            # First check if it's already all digits
-            if upc.isdigit():
-                # UPC is already clean, just pad if needed
-                pass
-            else:
-                # Only filter if there are non-digit characters
-                upc = ''.join(filter(str.isdigit, upc))
-            
-            # Pad with leading zeros if less than 12 digits
-            if len(upc) < 12:
-                upc = upc.zfill(12)
+
+            # Preserve UPCs that end with common apparel size suffixes.
+            if not upc.upper().endswith(('S', 'M', 'L', 'XL', 'XXL')):
+                # Only remove non-digit characters if absolutely necessary
+                # First check if it's already all digits
+                if upc.isdigit():
+                    # UPC is already clean, just pad if needed
+                    pass
+                else:
+                    # Only filter if there are non-digit characters
+                    upc = ''.join(filter(str.isdigit, upc))
+
+                # Pad with leading zeros if less than 12 digits
+                if len(upc) < 12:
+                    upc = upc.zfill(12)
             processed_row['UPC'] = upc
         
         # Set department based on CONFIG if DEPT is empty

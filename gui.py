@@ -25,7 +25,7 @@ class FileConverterApp:
         # ---------- Site Configurations ----------
         self.sites = {
             "St. Louis": {"jump": "100.107.39.118", "final": "192.168.12.99", "user": "trak", "password": "trak"},
-            "Springfield": {"jump": "100.118.199.62", "final": "192.168.1.99", "user": "trak", "password": "trak"},
+            "Springfield": {"jump": "100.96.172.82", "final": "192.168.1.99", "user": "trak", "password": "trak"},
             "Custom": {"jump": "", "final": "", "user": "", "password": ""}
         }
         default_site = "St. Louis"
