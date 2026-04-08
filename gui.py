@@ -3,6 +3,7 @@ GUI Application for TRAK File Builder.
 Supports optional multi-hop SSH upload (jump host) with site selection (St. Louis, Springfield, or Custom).
 """
 import os
+import socket
 import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -35,6 +36,7 @@ class FileConverterApp:
         self.output_dir = tk.StringVar(value=os.getcwd())
         self.excel_output_path = tk.StringVar()
         self.text_output_path = tk.StringVar()
+        self.transfer_mode = tk.StringVar(value="upload")
 
         self.site_selection = tk.StringVar(value=default_site)
         self.jump_host = tk.StringVar(value=self.sites[default_site]["jump"])
@@ -42,16 +44,27 @@ class FileConverterApp:
         self.scp_username = tk.StringVar(value=self.sites[default_site]["user"])
         self.scp_password = tk.StringVar(value=self.sites[default_site]["password"])
         self.scp_target_path = tk.StringVar(value="/trak/data/trakdelim.txt")
+        self.download_remote_path = tk.StringVar(value="/trak/data/rofile.dat")
+        self.download_output_path = tk.StringVar(value=os.path.join(os.getcwd(), "rofile.dat"))
+        self.site_entries = []
+        self.ssh_timeout_seconds = 10
 
         # ---------- Layout ----------
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky="nsew")
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(0, weight=3)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(1, weight=3)
+        main_frame.rowconfigure(2, weight=1)
+
+        mode_frame = ttk.LabelFrame(main_frame, text="Choose Action", padding="10")
+        mode_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        ttk.Radiobutton(mode_frame, text="Data Upload", variable=self.transfer_mode,
+                        value="upload", command=self.update_mode_view).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(mode_frame, text="Download Edit Order Data", variable=self.transfer_mode,
+                        value="download", command=self.update_mode_view).pack(side=tk.LEFT, padx=5)
 
         self.notebook = ttk.Notebook(main_frame)
-        self.notebook.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.notebook.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.page1, self.page2, self.page3 = ttk.Frame(self.notebook), ttk.Frame(self.notebook), ttk.Frame(self.notebook)
         for p in [self.page1, self.page2, self.page3]:
             p.columnconfigure(0, weight=1)
@@ -67,10 +80,11 @@ class FileConverterApp:
         self.create_page1()
         self.create_page2()
         self.create_page3()
+        self.create_download_panel(main_frame)
 
         # ---------- Log Area ----------
         log_frame = ttk.LabelFrame(main_frame, text="Log", padding="10")
-        log_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        log_frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD)
@@ -78,6 +92,7 @@ class FileConverterApp:
         scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text.config(yscrollcommand=scrollbar.set)
+        self.update_mode_view()
 
     # ---------- PAGE 1 ----------
     def create_page1(self):
@@ -139,18 +154,22 @@ class FileConverterApp:
         ttk.Label(upload_frame, text="Jump Host:").grid(row=1, column=0, sticky=tk.W)
         self.jump_entry = ttk.Entry(upload_frame, textvariable=self.jump_host, width=25, state="readonly")
         self.jump_entry.grid(row=1, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.jump_entry)
 
         ttk.Label(upload_frame, text="Final Host:").grid(row=2, column=0, sticky=tk.W)
         self.final_entry = ttk.Entry(upload_frame, textvariable=self.final_host, width=25, state="readonly")
         self.final_entry.grid(row=2, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.final_entry)
 
         ttk.Label(upload_frame, text="Username:").grid(row=3, column=0, sticky=tk.W)
         self.user_entry = ttk.Entry(upload_frame, textvariable=self.scp_username, width=25, state="readonly")
         self.user_entry.grid(row=3, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.user_entry)
 
         ttk.Label(upload_frame, text="Password:").grid(row=4, column=0, sticky=tk.W)
         self.pass_entry = ttk.Entry(upload_frame, textvariable=self.scp_password, width=25, show="*", state="readonly")
         self.pass_entry.grid(row=4, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.pass_entry)
 
         ttk.Label(upload_frame, text="Target Path:").grid(row=5, column=0, sticky=tk.W)
         ttk.Entry(upload_frame, textvariable=self.scp_target_path, width=50).grid(row=5, column=1, sticky=tk.EW, pady=3)
@@ -162,6 +181,50 @@ class FileConverterApp:
                   text="Next steps: [K] Optional Modules > [D]atabase Menu > [A]lternate Database Posting > "
                        "[T]rak Delimited Database > [U]pdate Database.",
                   wraplength=500).grid(row=7, column=0, columnspan=2, pady=10)
+
+    def create_download_panel(self, parent):
+        self.download_frame = ttk.Frame(parent)
+        self.download_frame.columnconfigure(0, weight=1)
+
+        frame = ttk.LabelFrame(self.download_frame, text="Download Edit Order Data", padding="20")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        frame.columnconfigure(1, weight=1)
+
+        ttk.Label(frame, text="Select Location:").grid(row=0, column=0, sticky=tk.W)
+        site_dropdown = ttk.Combobox(frame, textvariable=self.site_selection,
+                                     values=list(self.sites.keys()), state="readonly")
+        site_dropdown.grid(row=0, column=1, sticky=tk.W, pady=3)
+        site_dropdown.bind("<<ComboboxSelected>>", self.update_site_settings)
+
+        ttk.Label(frame, text="Jump Host:").grid(row=1, column=0, sticky=tk.W)
+        self.download_jump_entry = ttk.Entry(frame, textvariable=self.jump_host, width=25, state="readonly")
+        self.download_jump_entry.grid(row=1, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.download_jump_entry)
+
+        ttk.Label(frame, text="Final Host:").grid(row=2, column=0, sticky=tk.W)
+        self.download_final_entry = ttk.Entry(frame, textvariable=self.final_host, width=25, state="readonly")
+        self.download_final_entry.grid(row=2, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.download_final_entry)
+
+        ttk.Label(frame, text="Username:").grid(row=3, column=0, sticky=tk.W)
+        self.download_user_entry = ttk.Entry(frame, textvariable=self.scp_username, width=25, state="readonly")
+        self.download_user_entry.grid(row=3, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.download_user_entry)
+
+        ttk.Label(frame, text="Password:").grid(row=4, column=0, sticky=tk.W)
+        self.download_pass_entry = ttk.Entry(frame, textvariable=self.scp_password, width=25, show="*", state="readonly")
+        self.download_pass_entry.grid(row=4, column=1, sticky=tk.W, pady=3)
+        self.site_entries.append(self.download_pass_entry)
+
+        ttk.Label(frame, text="Remote File:").grid(row=5, column=0, sticky=tk.W)
+        ttk.Entry(frame, textvariable=self.download_remote_path, width=50).grid(row=5, column=1, sticky=tk.EW, pady=3)
+
+        ttk.Label(frame, text="Save As:").grid(row=6, column=0, sticky=tk.W)
+        ttk.Entry(frame, textvariable=self.download_output_path, width=50).grid(row=6, column=1, sticky=tk.EW, pady=3)
+        ttk.Button(frame, text="Browse...", command=self.browse_download_output).grid(row=6, column=2, padx=5)
+
+        ttk.Button(frame, text="Download Edit Order Data", command=self.download_edit_order_data, width=24)\
+            .grid(row=7, column=1, sticky=tk.E, pady=10)
 
     def update_site_settings(self, event=None):
         site = self.site_selection.get()
@@ -175,10 +238,18 @@ class FileConverterApp:
         self.log(f"Site set to {site}: jump={self.jump_host.get()}, final={self.final_host.get()}")
 
     def _set_entry_state(self, state):
-        self.jump_entry.config(state=state)
-        self.final_entry.config(state=state)
-        self.user_entry.config(state=state)
-        self.pass_entry.config(state=state)
+        for entry in self.site_entries:
+            entry.config(state=state)
+
+    def update_mode_view(self):
+        if self.transfer_mode.get() == "upload":
+            self.download_frame.grid_remove()
+            self.notebook.grid()
+            self.log("Mode set to data upload.")
+        else:
+            self.notebook.grid_remove()
+            self.download_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+            self.log("Mode set to download edit order data.")
 
     # ---------- File Actions ----------
     def browse_input_file(self):
@@ -192,6 +263,17 @@ class FileConverterApp:
         if d:
             self.output_dir.set(d)
             self.log(f"Selected output directory: {d}")
+
+    def browse_download_output(self):
+        f = filedialog.asksaveasfilename(
+            title="Save Edit Order Data As",
+            defaultextension=".dat",
+            initialfile=os.path.basename(self.download_output_path.get()),
+            filetypes=[("Data files", "*.dat"), ("All files", "*.*")]
+        )
+        if f:
+            self.download_output_path.set(f)
+            self.log(f"Selected download output path: {f}")
 
     def create_new_spreadsheet(self):
         f = filedialog.asksaveasfilename(title="Create New Spreadsheet", defaultextension=".xlsx",
@@ -235,8 +317,7 @@ class FileConverterApp:
     def open_text_file(self):
         open_with_default_app(self.text_output_path.get())
 
-    # ---------- Upload ----------
-    def upload_file(self):
+    def _ensure_paramiko(self):
         try:
             import paramiko
         except ImportError:
@@ -244,46 +325,100 @@ class FileConverterApp:
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "paramiko"])
                 import paramiko
             else:
-                return
+                return None
+        return paramiko
+
+    def _connect_ssh_client(self):
+        jump_host = self.jump_host.get().strip()
+        final_host = self.final_host.get().strip()
+        username = self.scp_username.get().strip()
+        password = self.scp_password.get().strip()
+        timeout = self.ssh_timeout_seconds
+
+        if not final_host or not username:
+            raise ValueError("Final host and username are required.")
+
+        from paramiko import SSHClient, AutoAddPolicy
+
+        jump = None
+        if jump_host:
+            self.log(f"Connecting to jump host {jump_host} with a {timeout}s timeout...")
+            jump = SSHClient()
+            jump.set_missing_host_key_policy(AutoAddPolicy())
+            jump.connect(
+                jump_host,
+                username=username,
+                password=password,
+                timeout=timeout,
+                banner_timeout=timeout,
+                auth_timeout=timeout,
+            )
+            self.log(f"Connected to jump host {jump_host}")
+
+            trans = jump.get_transport()
+            if trans is None:
+                raise ConnectionError(f"Connected to {jump_host}, but no SSH transport was available.")
+            chan = trans.open_channel("direct-tcpip", (final_host, 22), ("127.0.0.1", 0))
+            chan.settimeout(timeout)
+
+            final = SSHClient()
+            final.set_missing_host_key_policy(AutoAddPolicy())
+            self.log(f"Connecting to final host {final_host} through jump host...")
+            final.connect(
+                final_host,
+                username=username,
+                password=password,
+                sock=chan,
+                timeout=timeout,
+                banner_timeout=timeout,
+                auth_timeout=timeout,
+            )
+            self.log(f"Connected to final host {final_host} via {jump_host}")
+        else:
+            self.log(f"Connecting directly to {final_host} with a {timeout}s timeout...")
+            final = SSHClient()
+            final.set_missing_host_key_policy(AutoAddPolicy())
+            final.connect(
+                final_host,
+                username=username,
+                password=password,
+                timeout=timeout,
+                banner_timeout=timeout,
+                auth_timeout=timeout,
+            )
+            self.log(f"Connected directly to {final_host}")
+
+        return jump, final
+
+    def _close_ssh_clients(self, jump, final):
+        try:
+            if final:
+                final.close()
+        except Exception:
+            pass
+        try:
+            if jump:
+                jump.close()
+        except Exception:
+            pass
+
+    # ---------- Upload ----------
+    def upload_file(self):
+        if self._ensure_paramiko() is None:
+            return
 
         local_path = self.text_output_path.get()
         if not os.path.exists(local_path):
             messagebox.showerror("Error", f"File not found: {local_path}")
             return
 
-        jump_host = self.jump_host.get().strip()
         final_host = self.final_host.get().strip()
-        username = self.scp_username.get().strip()
-        password = self.scp_password.get().strip()
         target_path = self.scp_target_path.get().strip()
-
-        from paramiko import SSHClient, AutoAddPolicy
+        jump = None
+        final = None
 
         try:
-            if jump_host:
-                # --- Connect via jump host ---
-                self.log(f"Connecting to jump host {jump_host}...")
-                jump = SSHClient()
-                jump.set_missing_host_key_policy(AutoAddPolicy())
-                jump.connect(jump_host, username=username, password=password)
-                self.log(f"Connected to jump host {jump_host}")
-
-                trans = jump.get_transport()
-                chan = trans.open_channel("direct-tcpip", (final_host, 22), ("127.0.0.1", 0))
-
-                final = SSHClient()
-                final.set_missing_host_key_policy(AutoAddPolicy())
-                final.connect(final_host, username=username, password=password, sock=chan)
-                self.log(f"Connected to final host {final_host} via {jump_host}")
-            else:
-                # --- Direct connection ---
-                self.log(f"Connecting directly to {final_host}...")
-                final = SSHClient()
-                final.set_missing_host_key_policy(AutoAddPolicy())
-                final.connect(final_host, username=username, password=password)
-                self.log(f"Connected directly to {final_host}")
-
-            # --- Upload file ---
+            jump, final = self._connect_ssh_client()
             with final.open_sftp() as sftp:
                 self.log(f"Uploading {os.path.basename(local_path)} to {target_path}...")
                 sftp.put(local_path, target_path)
@@ -293,17 +428,50 @@ class FileConverterApp:
 
         except Exception as e:
             self.log(f"Upload error: {e}")
+            if isinstance(e, (socket.timeout, TimeoutError)):
+                messagebox.showerror("Upload Error", f"Connection timed out after {self.ssh_timeout_seconds} seconds.")
+                return
             messagebox.showerror("Upload Error", str(e))
         finally:
-            try:
-                final.close()
-            except Exception:
-                pass
-            try:
-                if jump_host:
-                    jump.close()
-            except Exception:
-                pass
+            self._close_ssh_clients(jump, final)
+
+    def download_edit_order_data(self):
+        if self._ensure_paramiko() is None:
+            return
+
+        remote_path = self.download_remote_path.get().strip()
+        local_path = self.download_output_path.get().strip()
+        final_host = self.final_host.get().strip()
+
+        if not remote_path:
+            messagebox.showerror("Error", "Remote file path is required.")
+            return
+        if not local_path:
+            messagebox.showerror("Error", "Local output path is required.")
+            return
+
+        local_dir = os.path.dirname(local_path) or os.getcwd()
+        os.makedirs(local_dir, exist_ok=True)
+
+        jump = None
+        final = None
+        try:
+            jump, final = self._connect_ssh_client()
+            with final.open_sftp() as sftp:
+                self.log(f"Downloading {remote_path} from {final_host}...")
+                sftp.get(remote_path, local_path)
+
+            messagebox.showinfo("Success", f"Downloaded edit order data to {local_path}")
+            self.log(f"Download complete: {local_path}")
+            open_with_default_app(local_path)
+        except Exception as e:
+            self.log(f"Download error: {e}")
+            if isinstance(e, (socket.timeout, TimeoutError)):
+                messagebox.showerror("Download Error", f"Connection timed out after {self.ssh_timeout_seconds} seconds.")
+                return
+            messagebox.showerror("Download Error", str(e))
+        finally:
+            self._close_ssh_clients(jump, final)
 
     def log(self, msg):
         self.log_text.insert(tk.END, msg + "\n")
