@@ -402,6 +402,15 @@ class FileConverterApp:
         except Exception:
             pass
 
+    def _open_in_notepad(self, file_path):
+        if os.name == "nt":
+            try:
+                subprocess.Popen(["notepad.exe", file_path])
+                return True
+            except Exception as e:
+                self.log(f"Could not open Notepad: {e}")
+        return open_with_default_app(file_path)
+
     # ---------- Upload ----------
     def upload_file(self):
         if self._ensure_paramiko() is None:
@@ -463,7 +472,7 @@ class FileConverterApp:
 
             messagebox.showinfo("Success", f"Downloaded edit order data to {local_path}")
             self.log(f"Download complete: {local_path}")
-            open_with_default_app(local_path)
+            self._open_in_notepad(local_path)
         except Exception as e:
             self.log(f"Download error: {e}")
             if isinstance(e, (socket.timeout, TimeoutError)):
