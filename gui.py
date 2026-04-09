@@ -8,6 +8,7 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import subprocess
+from datetime import datetime
 import pandas as pd
 
 from utils import open_with_default_app
@@ -411,28 +412,72 @@ class FileConverterApp:
                 self.log(f"Could not open Notepad: {e}")
         return open_with_default_app(file_path)
 
+    def _format_timestamp(self, timestamp):
+        return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+    def _ensure_latest_trak_file(self):
+        excel_path = self.excel_output_path.get().strip()
+        text_path = self.text_output_path.get().strip()
+
+        if not excel_path or not os.path.exists(excel_path):
+            return text_path
+
+        if not text_path:
+            text_path = os.path.join(self.output_dir.get().strip() or os.getcwd(), "trakdelim.txt")
+
+        should_rebuild = not os.path.exists(text_path)
+        if not should_rebuild:
+            should_rebuild = os.path.getmtime(excel_path) > os.path.getmtime(text_path)
+
+        if should_rebuild:
+            self.log("Spreadsheet is newer than the TRAK file. Rebuilding trakdelim.txt before upload...")
+            text_path = generate_delimited_file(excel_path, self.output_dir.get().strip() or os.getcwd())
+            self.text_output_path.set(text_path)
+            self.log(f"Rebuilt TRAK file: {text_path}")
+
+        return text_path
+
     # ---------- Upload ----------
     def upload_file(self):
         if self._ensure_paramiko() is None:
             return
 
-        local_path = self.text_output_path.get()
+        local_path = self._ensure_latest_trak_file()
         if not os.path.exists(local_path):
             messagebox.showerror("Error", f"File not found: {local_path}")
             return
 
         final_host = self.final_host.get().strip()
         target_path = self.scp_target_path.get().strip()
+        if not target_path:
+            messagebox.showerror("Error", "Target path is required.")
+            return
+
         jump = None
         final = None
 
         try:
             jump, final = self._connect_ssh_client()
             with final.open_sftp() as sftp:
-                self.log(f"Uploading {os.path.basename(local_path)} to {target_path}...")
+                local_size = os.path.getsize(local_path)
+                local_mtime = os.path.getmtime(local_path)
+                self.log(
+                    f"Uploading {os.path.basename(local_path)} to {target_path} "
+                    f"({local_size} bytes, modified {self._format_timestamp(local_mtime)})..."
+                )
                 sftp.put(local_path, target_path)
+                remote_stat = sftp.stat(target_path)
+                self.log(
+                    f"Remote file updated: {target_path} "
+                    f"({remote_stat.st_size} bytes, modified {self._format_timestamp(remote_stat.st_mtime)})"
+                )
 
-            messagebox.showinfo("Success", f"Uploaded to {final_host}:{target_path}")
+            messagebox.showinfo(
+                "Success",
+                f"Uploaded to {final_host}:{target_path}\n"
+                f"Remote size: {remote_stat.st_size} bytes\n"
+                f"Remote modified: {self._format_timestamp(remote_stat.st_mtime)}"
+            )
             self.log("✅ Upload complete.")
 
         except Exception as e:
