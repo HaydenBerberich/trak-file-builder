@@ -70,13 +70,16 @@ def process_input_data(input_file_path, output_dir):
         processed_row = row.copy()
         
         # Pad UPC with leading zeros to ensure it's at least 12 digits,
-        # unless it is a size-suffixed identifier that should stay literal.
+        # unless the row is a T-shirt item that should stay literal.
         if processed_row['UPC'] and processed_row['UPC'] != 'nan' and str(processed_row['UPC']).strip():
             # UPC is already a string, preserve it as much as possible
             upc = str(processed_row['UPC']).strip()
+            genre = str(processed_row.get('GENRE', '')).strip().upper()
+            config = str(processed_row.get('CONFIG', '')).strip().upper()
+            is_tshirt_item = genre == 'TS' or config == 'TS'
 
-            # Preserve UPCs that end with common apparel size suffixes.
-            if not upc.upper().endswith(('S', 'M', 'L', 'XL', 'XXL')):
+            # Preserve literal UPCs for T-shirt items.
+            if not is_tshirt_item:
                 # Only remove non-digit characters if absolutely necessary
                 # First check if it's already all digits
                 if upc.isdigit():
